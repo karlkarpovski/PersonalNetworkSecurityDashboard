@@ -25,7 +25,7 @@ Render a Three.js globe through Globe.gl with locally bundled borders and textur
 | Phase | Version target |
 | --- | --- |
 | Foundation | .NET SDK 10.0.403 with feature-band patch roll-forward, ASP.NET Core 10, Node 24 LTS, npm 11, React 19.3.0, Vite 8.3.6, TypeScript 6.0 |
-| Dashboard | Tailwind CSS 4, Lucide React, Recharts 3 |
+| Dashboard | Shared CSS tokens and Lucide React 1.70.0. Evaluate Recharts 3 when real series are introduced. |
 | Globe | Globe.gl 2 and its compatible Three.js release. Confirm 2D needs before adding MapLibre GL JS 5. |
 | Capture | SharpPcap 6.3.1, PacketDotNet 1.4.8, separately installed Npcap |
 | Streaming | ASP.NET Core SignalR 10 and a matching Microsoft SignalR JavaScript client |
@@ -52,6 +52,18 @@ docs/                                      Architecture and operator instruction
 ```
 
 Add projects as their phase introduces real code.
+
+## Dashboard layout
+
+The user's reference informs the horizontal navigation, navy surfaces with blue edge lighting, wide throughput plot paired with a protocol ring, and map paired with destination rankings. Use shared Soft UI panels and inset controls across views. At narrow widths, stack the panels in reading order and keep navigation horizontally scrollable with keyboard focus visible.
+
+- Globe and IP intelligence use a wide geographic stage with filters above it and endpoint or destination details alongside it. Keep the details below the visualization on narrow screens.
+- Packet monitor, connections, applications and history use a filter row over a results table. Show selected-record details in an adjacent panel where space permits.
+- Analytics uses the overview's wide-and-narrow chart pairing and compact legends. Alerts use the same panel header with severity labels, then place evidence next to the selected alert.
+- Settings groups controls into titled panels for adapter, local databases and storage. Keep API health distinct from capture state throughout.
+- Use empty chart scaffolds for unavailable data. An explicitly labeled demo mode in Phase 3 will supply simulated routes and traffic.
+
+The local SVG basemap uses [Natural Earth 1:110m land](https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_110m_land.geojson), projected to a simplified equirectangular silhouette. Natural Earth data is in the [public domain](https://www.naturalearthdata.com/about/terms-of-use/).
 
 ## Roadmap and acceptance checks
 

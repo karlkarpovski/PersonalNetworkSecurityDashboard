@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import {
+  Activity, Boxes, Cable, ChartNoAxesColumn, Globe2, History, LayoutDashboard,
+  RefreshCw, Search, Settings, Shield, ShieldAlert,
+} from 'lucide-react';
+import { Dashboard, GeographyPanel, TrafficPanels } from './Dashboard';
 
 const pages = [
-  { id: 'overview', title: 'Overview', detail: 'Monitor the status of your local network workspace.' },
-  { id: 'map', title: 'Global Traffic Map', detail: 'Endpoint geography and directional traffic routes arrive with the globe.' },
-  { id: 'packets', title: 'Live Packet Monitor', detail: 'Packet metadata will appear here after adapter capture is available.' },
-  { id: 'connections', title: 'Active Connections', detail: 'This view will group captured packets by local and remote endpoint.' },
-  { id: 'applications', title: 'Applications', detail: 'Traffic will appear by process where Windows can identify the owning socket.' },
-  { id: 'analytics', title: 'Traffic Analytics', detail: 'Charts will use recorded traffic once capture and aggregation are available.' },
-  { id: 'alerts', title: 'Security Alerts', detail: 'Configured rules will produce alerts with evidence from observed traffic.' },
-  { id: 'intelligence', title: 'IP Intelligence', detail: 'Offline City and ASN lookups will appear here once GeoIP is configured.' },
-  { id: 'history', title: 'Packet History', detail: 'Recorded metadata and export controls will be available here.' },
-  { id: 'settings', title: 'Settings', detail: 'Adapter, retention and GeoIP controls will be added in their respective phases.' },
+  { id: 'overview', title: 'Overview', detail: 'Traffic, destinations, and security activity for this device.', icon: LayoutDashboard },
+  { id: 'map', title: 'Global Traffic Map', detail: 'Explore approximate locations of observed network endpoints.', icon: Globe2 },
+  { id: 'packets', title: 'Live Packet Monitor', detail: 'Packet metadata will appear here after adapter capture is available.', icon: Activity },
+  { id: 'connections', title: 'Active Connections', detail: 'This view will group captured packets by local and remote endpoint.', icon: Cable },
+  { id: 'applications', title: 'Applications', detail: 'Traffic will appear by process where Windows can identify the owning socket.', icon: Boxes },
+  { id: 'analytics', title: 'Traffic Analytics', detail: 'Review throughput and protocol usage over the current session.', icon: ChartNoAxesColumn },
+  { id: 'alerts', title: 'Security Alerts', detail: 'Configured rules will produce alerts with evidence from observed traffic.', icon: ShieldAlert },
+  { id: 'intelligence', title: 'IP Intelligence', detail: 'Offline City and ASN lookups will appear here once GeoIP is configured.', icon: Search },
+  { id: 'history', title: 'Packet History', detail: 'Recorded metadata and export controls will be available here.', icon: History },
+  { id: 'settings', title: 'Settings', detail: 'Adapter, retention and GeoIP controls will be added in their respective phases.', icon: Settings },
 ];
 
 type Health = 'checking' | 'ready' | 'offline';
@@ -65,52 +70,45 @@ export function App() {
         event.preventDefault();
         document.getElementById('workspace')?.focus();
       }}>Skip to workspace</a>
-      <aside className="sidebar">
-        <a className="brand" href="#overview"><span className="monogram" aria-hidden="true">NS</span> Personal Network Security</a>
-        <nav aria-label="Workspace">
-          {pages.map(item => (
-            <a key={item.id} href={`#${item.id}`} aria-current={page.id === item.id ? 'page' : undefined}>
-              {item.title}
+      <header className="topbar soft-panel">
+        <a className="brand" href="#overview">
+          <span className="monogram"><Shield size={21} aria-hidden="true" /></span>
+          Personal Network Security
+        </a>
+        <div className="service-controls">
+          <span className={`status inset-surface ${health}`} role="status"><i className="dot" />{status}</span>
+          <button className="icon-button" type="button" title="Check connection" aria-label="Check connection"
+            disabled={health === 'checking'} onClick={() => {
+              setHealth('checking');
+              setAttempt(previous => previous + 1);
+            }}><RefreshCw size={17} aria-hidden="true" /></button>
+        </div>
+        <nav className="navigation" aria-label="Workspace">
+          {pages.map(({ id, title, icon: Icon }) => (
+            <a key={id} href={`#${id}`} aria-current={page.id === id ? 'page' : undefined}>
+              <Icon size={16} aria-hidden="true" />{title}
             </a>
           ))}
         </nav>
-      </aside>
-      <div className="workspace">
-        <header className="topbar">
-          <span>LOCAL WORKSPACE</span>
-          <span className={`status ${health}`} role="status">{status}</span>
-        </header>
-        <main id="workspace" tabIndex={-1}>
-          <p className="eyebrow">PHASE 01 / FOUNDATION</p>
-          <h1>{page.title}</h1>
-          <p className="description">{page.detail}</p>
-          {page.id === 'overview' ? (
-            <section className="panels" aria-label="System status">
-              <article>
-                <p className="eyebrow">01 / SERVICE</p>
-                <h2>{status}</h2>
-                <p>{health === 'offline' ? 'Start the backend, then retry the connection.' : 'The local service reports startup health.'}</p>
-                <button disabled={health === 'checking'} onClick={() => {
-                  setHealth('checking');
-                  setAttempt(previous => previous + 1);
-                }}>Check connection</button>
-              </article>
-              <article>
-                <p className="eyebrow">02 / MONITORING</p>
-                <h2>Capture unavailable</h2>
-                <p>Adapter selection and live monitoring arrive in Phase 4.</p>
-              </article>
-            </section>
-          ) : (
-            <section className="panels" aria-label="Feature status">
-              <article>
-                <h2>Coming in a later phase</h2>
-                <a href="#overview">Return to overview</a>
-              </article>
+      </header>
+      <main id="workspace" tabIndex={-1}>
+        <p className="eyebrow">Network operations</p>
+        <h1>{page.title}</h1>
+        <p className="description">{page.detail}</p>
+        {health === 'offline' && <p className="offline-message">Start the local API, then use Check connection to retry.</p>}
+        <div className="page-content">
+          {page.id === 'overview' && <Dashboard />}
+          {page.id === 'analytics' && <TrafficPanels />}
+          {page.id === 'map' && <GeographyPanel />}
+          {!['overview', 'analytics', 'map'].includes(page.id) && (
+            <section className="soft-panel feature-empty" aria-label="Feature status">
+              <page.icon size={25} aria-hidden="true" />
+              <h2>Coming in a later phase</h2>
+              <a href="#overview">Return to overview</a>
             </section>
           )}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

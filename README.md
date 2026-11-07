@@ -1,6 +1,6 @@
 # Personal Network Security
 
-Phase 1 is a local development foundation. The dashboard shell shows the API's health and exposes navigation for the planned workspace. Traffic capture, the globe and security analysis are scheduled in later phases. The shell displays no traffic metrics.
+Phase 2 adds a responsive Soft UI dashboard with session metrics, traffic and protocol panels, an offline basemap, and summaries for applications, alerts and activity. The API health indicator is functional. Traffic views show explicit empty states until monitoring is available.
 
 ## Run locally on Windows
 
