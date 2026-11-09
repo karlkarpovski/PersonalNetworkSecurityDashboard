@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../backend/PersonalNetworkSecurity.Api/PersonalNetworkSecurity.Api.csproj" />
+    <ProjectReference Include="../../backend/PersonalNetworkSecurity.Capture/PersonalNetworkSecurity.Capture.csproj" />
+    <ProjectReference Include="../../backend/PersonalNetworkSecurity.GeoIP/PersonalNetworkSecurity.GeoIP.csproj" />
+  </ItemGroup>
+</Project>

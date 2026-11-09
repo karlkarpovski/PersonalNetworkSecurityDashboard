@@ -1,21 +1,30 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Activity, Boxes, Cable, ChartNoAxesColumn, Globe2, History, LayoutDashboard,
   RefreshCw, Search, Settings, Shield, ShieldAlert,
 } from 'lucide-react';
-import { Dashboard, GeographyPanel, TrafficPanels } from './Dashboard';
+import { Dashboard } from './Dashboard';
+import { CaptureAccessForm, CaptureControls, FlowPanel, PacketPanel } from './capture/CapturePages';
+import { useCaptureStream } from './capture/useCaptureStream';
+import { GeoSettingsPanel, IpIntelligence } from './geo/GeoPanels';
+import { ApplicationsPanel } from './capture/ApplicationsPanel';
+import { PacketHistoryPanel } from './capture/PacketHistoryPanel';
+import { TrafficAnalytics } from './capture/TrafficAnalytics';
+import { SecurityPanel } from './security/SecurityPanel';
+
+const GlobePage = lazy(() => import('./globe/GlobePage'));
 
 const pages = [
   { id: 'overview', title: 'Overview', detail: 'Traffic, destinations, and security activity for this device.', icon: LayoutDashboard },
   { id: 'map', title: 'Global Traffic Map', detail: 'Explore approximate locations of observed network endpoints.', icon: Globe2 },
-  { id: 'packets', title: 'Live Packet Monitor', detail: 'Packet metadata will appear here after adapter capture is available.', icon: Activity },
-  { id: 'connections', title: 'Active Connections', detail: 'This view will group captured packets by local and remote endpoint.', icon: Cable },
-  { id: 'applications', title: 'Applications', detail: 'Traffic will appear by process where Windows can identify the owning socket.', icon: Boxes },
+  { id: 'packets', title: 'Live Packet Monitor', detail: 'Start Windows capture and inspect recent IP packet metadata.', icon: Activity },
+  { id: 'connections', title: 'Active Connections', detail: 'Inspect observed traffic grouped by local and remote endpoint.', icon: Cable },
+  { id: 'applications', title: 'Applications', detail: 'Review captured traffic attributed to Windows processes.', icon: Boxes },
   { id: 'analytics', title: 'Traffic Analytics', detail: 'Review throughput and protocol usage over the current session.', icon: ChartNoAxesColumn },
-  { id: 'alerts', title: 'Security Alerts', detail: 'Configured rules will produce alerts with evidence from observed traffic.', icon: ShieldAlert },
-  { id: 'intelligence', title: 'IP Intelligence', detail: 'Offline City and ASN lookups will appear here once GeoIP is configured.', icon: Search },
-  { id: 'history', title: 'Packet History', detail: 'Recorded metadata and export controls will be available here.', icon: History },
-  { id: 'settings', title: 'Settings', detail: 'Adapter, retention and GeoIP controls will be added in their respective phases.', icon: Settings },
+  { id: 'alerts', title: 'Security Alerts', detail: 'Investigate observed events and configure detection rules.', icon: ShieldAlert },
+  { id: 'intelligence', title: 'IP Intelligence', detail: 'Look up approximate locations and network ownership using local GeoIP files.', icon: Search },
+  { id: 'history', title: 'Packet History', detail: 'Search and export retained packet metadata from the latest capture session.', icon: History },
+  { id: 'settings', title: 'Settings', detail: 'Manage the local capture adapter.', icon: Settings },
 ];
 
 type Health = 'checking' | 'ready' | 'offline';
@@ -28,6 +37,13 @@ export function App() {
   const [page, setPage] = useState(currentPage);
   const [health, setHealth] = useState<Health>('checking');
   const [attempt, setAttempt] = useState(0);
+  const capture = useCaptureStream();
+  const liveStatus = {
+    locked: 'Live stream locked', connecting: 'Connecting live stream',
+    connected: 'Live stream connected', reconnecting: 'Reconnecting live stream',
+  }[capture.status];
+  const captureControls = capture.code && <CaptureControls code={capture.code}
+    view={capture.view} offline={capture.status !== 'connected'} />;
 
   useEffect(() => {
     const onHashChange = () => setPage(currentPage());
@@ -44,7 +60,7 @@ export function App() {
         const response = await fetch('/api/health', { signal: controller.signal, cache: 'no-store' });
         if (!response.ok) throw new Error('Health endpoint unavailable');
         const result = await response.json();
-        if (result?.status !== 'ready' || result?.capture !== 'unavailable') {
+        if (result?.status !== 'ready') {
           throw new Error('Unexpected health response');
         }
         if (!controller.signal.aborted) setHealth('ready');
@@ -76,6 +92,7 @@ export function App() {
           Personal Network Security
         </a>
         <div className="service-controls">
+          <span className={`status inset-surface ${capture.status === 'connected' ? 'ready' : ''}`} role="status">{liveStatus}</span>
           <span className={`status inset-surface ${health}`} role="status"><i className="dot" />{status}</span>
           <button className="icon-button" type="button" title="Check connection" aria-label="Check connection"
             disabled={health === 'checking'} onClick={() => {
@@ -97,16 +114,24 @@ export function App() {
         <p className="description">{page.detail}</p>
         {health === 'offline' && <p className="offline-message">Start the local API, then use Check connection to retry.</p>}
         <div className="page-content">
-          {page.id === 'overview' && <Dashboard />}
-          {page.id === 'analytics' && <TrafficPanels />}
-          {page.id === 'map' && <GeographyPanel />}
-          {!['overview', 'analytics', 'map'].includes(page.id) && (
-            <section className="soft-panel feature-empty" aria-label="Feature status">
-              <page.icon size={25} aria-hidden="true" />
-              <h2>Coming in a later phase</h2>
-              <a href="#overview">Return to overview</a>
-            </section>
+          {capture.status === 'locked' &&
+            <CaptureAccessForm rejected={capture.rejected} unlock={capture.unlock} />}
+          {page.id === 'overview' && <Dashboard capture={capture.view} geo={capture.geo} security={capture.security}
+            samples={capture.samples} streamLabel={liveStatus} />}
+          {page.id === 'packets' && <>{captureControls}<PacketPanel view={capture.view} /></>}
+          {page.id === 'connections' && <FlowPanel view={capture.view} geo={capture.geo} />}
+          {page.id === 'applications' && <ApplicationsPanel view={capture.view} />}
+          {page.id === 'history' && capture.code && <PacketHistoryPanel key={capture.view?.sessionId ?? 'idle'}
+            code={capture.code} sessionId={capture.view?.sessionId ?? null} />}
+          {page.id === 'settings' && <>{captureControls}{capture.code && <GeoSettingsPanel code={capture.code} />}</>}
+          {page.id === 'intelligence' && capture.code && <IpIntelligence code={capture.code} flows={capture.view?.traffic?.recentFlows} />}
+          {page.id === 'analytics' && <TrafficAnalytics view={capture.view} geo={capture.geo} samples={capture.samples} />}
+          {page.id === 'map' && (
+            <Suspense fallback={<p role="status">Loading the globe…</p>}>
+              <GlobePage flows={capture.view?.traffic?.recentFlows} geo={capture.geo} flaggedIps={capture.security?.flaggedIps} />
+            </Suspense>
           )}
+          {page.id === 'alerts' && capture.code && <SecurityPanel code={capture.code} summary={capture.security} />}
         </div>
       </main>
     </div>

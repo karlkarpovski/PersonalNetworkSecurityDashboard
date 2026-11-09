@@ -8,3 +8,5 @@
 *.pcap
 *.pcapng
 .env*
+.local-dotnet/
+.local-nuget/

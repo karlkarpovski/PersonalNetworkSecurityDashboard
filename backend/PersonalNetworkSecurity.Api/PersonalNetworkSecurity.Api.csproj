@@ -4,4 +4,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PersonalNetworkSecurity.Capture.Checks" />
+    <ProjectReference Include="../PersonalNetworkSecurity.Capture/PersonalNetworkSecurity.Capture.csproj" />
+    <ProjectReference Include="../PersonalNetworkSecurity.GeoIP/PersonalNetworkSecurity.GeoIP.csproj" />
+  </ItemGroup>
 </Project>

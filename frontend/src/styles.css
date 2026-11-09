@@ -45,6 +45,7 @@ button { font: inherit; }
   background: var(--panel);
 }
 .brand, .service-controls, .navigation a, .panel-link, .panel-heading h2 { display: flex; align-items: center; gap: .55rem; }
+.service-controls { flex-wrap: wrap; }
 .brand { width: fit-content; color: inherit; text-decoration: none; font-weight: 700; }
 .monogram, .icon-button, .metric-icon { display: grid; place-items: center; flex: none; border-radius: .7rem; }
 .monogram { width: 2.35rem; height: 2.35rem; color: var(--cyan); background: #18304f; box-shadow: var(--raised-small); }
@@ -98,12 +99,20 @@ h3 { margin: 0; font-size: .95rem; }
   padding: .85rem;
   background-image: repeating-linear-gradient(transparent 0 2rem, #273b55 2rem calc(2rem + 1px));
 }
+.plot-with-data { display: block; }
+.rate-chart { display: grid; gap: .25rem; color: var(--muted); font-size: .75rem; }
+.rate-chart svg { width: 100%; height: 9rem; overflow: visible; }
+.rate-chart span:last-child { text-align: right; }
+.packet-rate-series { color: #b1a9ff; }
+.analytics-rankings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1.15rem; }
 .empty-plot { display: grid; justify-items: center; gap: .35rem; padding: .75rem 1rem; text-align: center; background: var(--surface); border-radius: .8rem; }
 .empty-plot svg, .protocol-ring svg, .feature-empty svg { color: #91baff; }
 .empty-plot span, .protocol-ring span { color: var(--muted); font-size: .8rem; }
 .protocol-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: .75rem; align-items: center; min-height: 13rem; }
 .protocol-ring { display: grid; place-items: center; aspect-ratio: 1; width: min(100%, 10rem); margin-inline: auto; border: .65rem solid #2a3b52; border-radius: 50%; box-shadow: var(--inset), var(--raised-small); background: var(--surface); }
 .protocol-ring div { display: grid; justify-items: center; gap: .3rem; text-align: center; }
+.protocol-ring-data { border: 0; padding: .65rem; }
+.protocol-ring-data div { align-content: center; width: 100%; height: 100%; border-radius: 50%; background: var(--surface); box-shadow: var(--inset); }
 .protocol-list { display: grid; gap: .5rem; padding: 0; margin: 0; list-style: none; }
 .protocol-list li { display: flex; justify-content: space-between; gap: .4rem; padding: .4rem .55rem; border-radius: .5rem; color: var(--muted); background: var(--surface); font-size: .78rem; }
 
@@ -121,6 +130,10 @@ h3 { margin: 0; font-size: .95rem; }
 .map-caption { position: absolute; bottom: .5rem; left: .6rem; }
 .country-list { padding: 1rem; }
 .country-list p, .activity-panel p { margin: .55rem 0 0; font-size: .86rem; }
+.country-rank { list-style: none; display: grid; gap: .45rem; margin: .7rem 0 0; padding: 0; }
+.country-rank li { display: flex; justify-content: space-between; gap: .55rem; font-size: .8rem; padding: .4rem 0; border-bottom: 1px solid var(--edge); }
+.country-rank li span { min-width: 0; overflow-wrap: anywhere; }
+.country-rank strong { white-space: nowrap; }
 .activity-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.15rem; }
 .activity-panel .panel-heading svg { flex: none; color: var(--cyan); }
 .feature-empty h2 { margin: .55rem 0; }

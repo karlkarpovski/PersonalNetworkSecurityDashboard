@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="backend/PersonalNetworkSecurity.Api/PersonalNetworkSecurity.Api.csproj" />
+  <Project Path="backend/PersonalNetworkSecurity.Capture/PersonalNetworkSecurity.Capture.csproj" />
+  <Project Path="backend/PersonalNetworkSecurity.GeoIP/PersonalNetworkSecurity.GeoIP.csproj" />
+  <Project Path="tests/PersonalNetworkSecurity.Capture.Checks/PersonalNetworkSecurity.Capture.Checks.csproj" />
 </Solution>

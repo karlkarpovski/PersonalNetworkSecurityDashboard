@@ -1,0 +1,10 @@
+.geo-path { overflow-wrap: anywhere; margin-left: .35rem; color: var(--cyan); }
+.geo-file-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .65rem; padding: 0; list-style: none; }
+.geo-file-list li { display: grid; gap: .35rem; padding: .75rem; }
+.geo-file-list span { text-transform: capitalize; }
+.geo-file-list small { color: var(--muted); }
+.geo-origin-form label { flex-basis: 8rem; }
+.geo-result { padding: .9rem; margin-top: .8rem; }
+.geo-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: .45rem .65rem; font-size: .83rem; }
+.geo-details dt { color: var(--muted); }
+.geo-details dd { margin: 0; overflow-wrap: anywhere; }
