@@ -13,6 +13,22 @@ const thresholds = [
   { key: 'destinations', label: 'Distinct destinations', max: 4096 },
   { key: 'synPackets', label: 'Outbound SYNs per IP', max: 100000 },
   { key: 'refusedAttempts', label: 'Matched TCP resets per IP', max: 100000 },
+  { key: 'scanPorts', label: 'Distinct TCP ports or targets', max: 4096 },
+  { key: 'sweepHosts', label: 'Pinged hosts per source', max: 4096 },
+  { key: 'stealthProbes', label: 'Unusual TCP probes per source', max: 4096 },
+  { key: 'unexpectedPackets', label: 'Unexpected packets per source and protocol', max: 4096 },
+  { key: 'reconWindowSeconds', label: 'Reconnaissance window (seconds)', min: 1, max: 300 },
+  { key: 'floodWindowSeconds', label: 'Traffic anomaly window (seconds)', min: 1, max: 300 },
+  { key: 'inboundSynRate', label: 'Inbound SYNs per second per service', max: 100000 },
+  { key: 'udpPacketRate', label: 'Inbound UDP packets per second per service', max: 100000 },
+  { key: 'udpKiBRate', label: 'Inbound UDP KiB per second per service', max: 1000000 },
+  { key: 'icmpPacketRate', label: 'Inbound ICMP packets per second per address', max: 100000 },
+  { key: 'pendingConnections', label: 'Incomplete inbound TCP attempts per service', max: 4096 },
+  { key: 'dnsWindowSeconds', label: 'DNS observation window (seconds)', min: 1, max: 300 },
+  { key: 'dnsTunnelingNames', label: 'Distinct suspicious DNS labels per suffix', max: 4096 },
+  { key: 'dnsLabelLength', label: 'Minimum suspicious DNS label length', min: 12, max: 63 },
+  { key: 'dnsQueries', label: 'DNS queries per resolver per window', max: 100000 },
+  { key: 'dnsNxDomains', label: 'DNS NXDOMAIN replies per resolver per window', max: 4096 },
 ] as const;
 const severities = ['informational', 'low', 'medium', 'high', 'critical'];
 type ThresholdDraft = Record<(typeof thresholds)[number]['key'], number | ''>;
@@ -21,7 +37,12 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
   const [history, setHistory] = useState<SecurityAlert[]>([]);
   const [settings, setSettings] = useState<SecuritySettings>();
   const [rules, setRules] = useState<ThresholdDraft>();
+  const [dnsBlocked, setDnsBlocked] = useState('');
+  const [dnsExcluded, setDnsExcluded] = useState('');
+  const [dnsTypes, setDnsTypes] = useState('');
+  const [dnsConflicts, setDnsConflicts] = useState(false);
   const [ports, setPorts] = useState('');
+  const [allowedProtocols, setAllowedProtocols] = useState('');
   const [countries, setCountries] = useState('');
   const [ip, setIp] = useState('');
   const [list, setList] = useState<AddressRule['list']>('watch');
@@ -40,7 +61,12 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
       if (controller.signal.aborted) return;
       setSettings(result);
       setRules(result.rules);
+      setDnsBlocked(result.rules.dnsBlockedDomains?.join(', ') ?? '');
+      setDnsExcluded(result.rules.dnsExcludedDomains?.join(', ') ?? '');
+      setDnsTypes(result.rules.dnsAllowedTypes?.join(', ') ?? '');
+      setDnsConflicts(result.rules.dnsConflictingReplies);
       setPorts(result.rules.ports?.join(', ') ?? '');
+      setAllowedProtocols(result.rules.allowedProtocols?.join(', ') ?? '');
       setCountries(result.rules.countries?.join(', ') ?? '');
     }).catch(reason => { if (!controller.signal.aborted) setError(reason.message); });
     return () => controller.abort();
@@ -75,10 +101,17 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
     const items = (value: string) => value.split(',').map(item => item.trim()).filter(Boolean);
     void update(async () => {
       const result = await captureRequest<SecuritySettings>(code, 'security/rules',
-        put({ ...rules, ports: items(ports).map(Number), countries: items(countries) }));
+        put({ ...rules, ports: items(ports).map(Number), countries: items(countries), allowedProtocols: items(allowedProtocols).map(Number),
+          dnsBlockedDomains: items(dnsBlocked), dnsExcludedDomains: items(dnsExcluded),
+          dnsAllowedTypes: items(dnsTypes).map(Number), dnsConflictingReplies: dnsConflicts }));
       setSettings(result);
       setRules(result.rules);
+      setDnsBlocked(result.rules.dnsBlockedDomains?.join(', ') ?? '');
+      setDnsExcluded(result.rules.dnsExcludedDomains?.join(', ') ?? '');
+      setDnsTypes(result.rules.dnsAllowedTypes?.join(', ') ?? '');
+      setDnsConflicts(result.rules.dnsConflictingReplies);
       setPorts(result.rules.ports?.join(', ') ?? '');
+      setAllowedProtocols(result.rules.allowedProtocols?.join(', ') ?? '');
       setCountries(result.rules.countries?.join(', ') ?? '');
     }, 'Alert rules saved.');
   }
@@ -143,12 +176,22 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
       </section>
       <section className="soft-panel capture-panel" aria-labelledby="rules-title">
         <h2 id="rules-title">Detection rules</h2>
-        <p>Thresholds count non-trusted traffic in fixed 10-second windows. Use 0 to disable a threshold. Port and country matches have low severity.</p>
+        <p>Existing traffic thresholds use fixed 10-second windows. Reconnaissance and traffic anomaly thresholds each use their own configurable window. Rate thresholds are averaged over the full traffic anomaly window. Use 0 to disable a threshold. Port and country matches have low severity.</p>
         {rules && <form className="security-form" onSubmit={event => { event.preventDefault(); saveRules(); }}>
-          {thresholds.map(({ key, label, max }) => <label key={key}>{label}<input type="number" required min={0} max={max}
+          {thresholds.map(({ key, label, max, ...range }) => <label key={key}>{label}<input type="number" required min={"min" in range ? range.min : 0} max={max}
             value={rules[key]} onChange={event => setRules({ ...rules, [key]: event.target.value === '' ? '' : Number(event.target.value) })} /></label>)}
           <label>Monitored destination ports<input value={ports} onChange={event => setPorts(event.target.value)} placeholder="Comma-separated, e.g. 23, 445" maxLength={256} /></label>
           <label>Monitored country codes<input value={countries} onChange={event => setCountries(event.target.value)} placeholder="Comma-separated, e.g. GB, JP" maxLength={160} /></label>
+          <label>Allowed IP protocol numbers<input value={allowedProtocols} onChange={event => setAllowedProtocols(event.target.value)}
+            placeholder="Comma-separated, e.g. 1, 6, 17, 58" maxLength={1280} required={Number(rules.unexpectedPackets) > 0} /></label>
+          <label>DNS denylist domains<input value={dnsBlocked} onChange={event => setDnsBlocked(event.target.value)}
+            placeholder="Comma-separated domain suffixes" /></label>
+          <label>DNS excluded domains<input value={dnsExcluded} onChange={event => setDnsExcluded(event.target.value)}
+            placeholder="Comma-separated domain suffixes" /></label>
+          <label>Allowed DNS record type numbers<input value={dnsTypes} onChange={event => setDnsTypes(event.target.value)}
+            placeholder="Comma-separated, e.g. 1, 28" /></label>
+          <label><input type="checkbox" checked={dnsConflicts} onChange={event => setDnsConflicts(event.target.checked)} />
+            Flag conflicting DNS replies</label>
           <button className="capture-button" type="submit" disabled={pending}>Save rules</button>
         </form>}
       </section>

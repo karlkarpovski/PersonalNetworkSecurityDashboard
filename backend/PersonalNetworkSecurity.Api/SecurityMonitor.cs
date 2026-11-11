@@ -2,7 +2,14 @@ using PersonalNetworkSecurity.Capture;
 using PersonalNetworkSecurity.GeoIP;
 
 internal sealed record AlertRules(int BandwidthMiB = 50, int Destinations = 50, int SynPackets = 12,
-    int RefusedAttempts = 5, int[]? Ports = null, string[]? Countries = null);
+    int RefusedAttempts = 5, int[]? Ports = null, string[]? Countries = null,
+    int ScanPorts = 0, int SweepHosts = 0, int StealthProbes = 0, int UnexpectedPackets = 0,
+    int ReconWindowSeconds = 10, int[]? AllowedProtocols = null,
+    int FloodWindowSeconds = 10, int InboundSynRate = 0, int UdpPacketRate = 0,
+    int UdpKiBRate = 0, int IcmpPacketRate = 0, int PendingConnections = 0,
+    int DnsWindowSeconds = 30, int DnsTunnelingNames = 0, int DnsLabelLength = 30,
+    int DnsQueries = 0, int DnsNxDomains = 0, bool DnsConflictingReplies = false,
+    string[]? DnsBlockedDomains = null, string[]? DnsExcludedDomains = null, int[]? DnsAllowedTypes = null);
 internal sealed record AddressRule(string Ip, string List);
 internal sealed record SecurityAlert(Guid Id, Guid SessionId, DateTimeOffset ObservedAt, string Rule, string Severity,
     string State, string? RemoteIp, string Evidence);
@@ -20,12 +27,15 @@ internal sealed class SecurityMonitor
     private readonly LocalStore? store;
     private readonly List<SecurityAlert> alerts = [];
     private readonly Dictionary<string, string> addresses = new(StringComparer.Ordinal);
-    private readonly Dictionary<(string Rule, string? Ip), DateTimeOffset> cooldowns = new();
+    private readonly Dictionary<(string Rule, string? Ip, string? Scope), DateTimeOffset> cooldowns = new();
     private readonly HashSet<string> destinations = new(StringComparer.Ordinal);
     private readonly HashSet<string> checkedCountries = new(StringComparer.Ordinal);
     private readonly Dictionary<FlowKey, uint> pendingSyn = new();
     private readonly Dictionary<string, int> synCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> refusalCounts = new(StringComparer.Ordinal);
+    private readonly ReconDetection recon = new();
+    private readonly FloodDetection flood = new();
+    private readonly DnsDetection dns = new();
     private AlertRules rules = new();
     private Guid session;
     private long window = -1;
@@ -57,6 +67,9 @@ internal sealed class SecurityMonitor
             {
                 session = sessionId;
                 cooldowns.Clear();
+                recon.Reset();
+                flood.Reset();
+                dns.Reset();
                 ResetWindow(tick);
             }
             if (tick < window) return;
@@ -95,6 +108,17 @@ internal sealed class SecurityMonitor
                     Emit(packet, "monitored-country", "low", ip, $"Local GeoIP associated outbound address {ip} with configured country code {country}. The location is approximate.");
             }
 
+            recon.Observe(packet, rules, (rule, severity, evidence) => Emit(packet, rule, severity, ip, evidence));
+
+            if (rules is { InboundSynRate: > 0 } or { UdpPacketRate: > 0 } or { UdpKiBRate: > 0 }
+                or { IcmpPacketRate: > 0 } or { PendingConnections: > 0 })
+                flood.Observe(packet, rules, (rule, severity, scope, evidence) =>
+                    Emit(packet, rule, severity, null, evidence, scope));
+
+            if (packet.Dns is { } message)
+                dns.Observe(packet, message, rules, (rule, severity, scope, evidence) =>
+                    Emit(packet, rule, severity, ip, evidence, scope));
+
             if (packet.Tcp is not { } tcp || packet.SourcePort is null || packet.DestinationPort is null
                 || (rules.SynPackets == 0 && rules.RefusedAttempts == 0)) return;
             var tuple = FlowKey.ForPacket(packet);
@@ -129,16 +153,37 @@ internal sealed class SecurityMonitor
     {
         if (updated.BandwidthMiB is < 0 or > 100000 || updated.Destinations is < 0 or > CounterLimit
             || updated.SynPackets is < 0 or > 100000 || updated.RefusedAttempts is < 0 or > 100000
+            || updated.ScanPorts is < 0 or > CounterLimit || updated.SweepHosts is < 0 or > CounterLimit
+            || updated.StealthProbes is < 0 or > CounterLimit || updated.UnexpectedPackets is < 0 or > CounterLimit
+            || updated.ReconWindowSeconds is < 1 or > 300
+            || updated.AllowedProtocols is { Length: > 256 }
+            || updated.AllowedProtocols?.Any(protocol => protocol is < 0 or > 255) == true
+            || updated.UnexpectedPackets > 0 && updated.AllowedProtocols is not { Length: > 0 }
+            || updated.FloodWindowSeconds is < 1 or > 300 || updated.InboundSynRate is < 0 or > 100000
+            || updated.UdpPacketRate is < 0 or > 100000 || updated.UdpKiBRate is < 0 or > 1000000
+            || updated.IcmpPacketRate is < 0 or > 100000 || updated.PendingConnections is < 0 or > CounterLimit
+            || updated.DnsWindowSeconds is < 1 or > 300 || updated.DnsLabelLength is < 12 or > 63
+            || updated.DnsTunnelingNames is < 0 or > CounterLimit || updated.DnsQueries is < 0 or > 100000
+            || updated.DnsNxDomains is < 0 or > CounterLimit || updated.DnsAllowedTypes is { Length: > 128 }
+            || updated.DnsAllowedTypes?.Any(type => type is < 1 or > 65535) == true
+            || !DnsDetection.ValidDomains(updated.DnsBlockedDomains) || !DnsDetection.ValidDomains(updated.DnsExcludedDomains)
             || updated.Ports is { Length: > 32 } || updated.Ports?.Any(port => port is < 1 or > 65535) == true
             || updated.Countries is { Length: > 32 } || updated.Countries?.Any(code =>
                 code is null || code.Length != 2 || !code.All(char.IsAsciiLetter)) == true) return false;
         lock (gate)
         {
             var next = updated with { Ports = updated.Ports?.Distinct().ToArray(),
-                Countries = updated.Countries?.Select(code => code.ToUpperInvariant()).Distinct().ToArray() };
+                Countries = updated.Countries?.Select(code => code.ToUpperInvariant()).Distinct().ToArray(),
+                AllowedProtocols = updated.AllowedProtocols?.Distinct().ToArray(),
+                DnsAllowedTypes = updated.DnsAllowedTypes?.Distinct().ToArray(),
+                DnsBlockedDomains = DnsDetection.NormalizeDomains(updated.DnsBlockedDomains),
+                DnsExcludedDomains = DnsDetection.NormalizeDomains(updated.DnsExcludedDomains) };
             store?.SaveSetting("security", Settings() with { Rules = next });
             rules = next;
             ResetWindow(window);
+            recon.Reset();
+            flood.Reset();
+            dns.Reset();
             cooldowns.Clear();
             return true;
         }
@@ -160,6 +205,9 @@ internal sealed class SecurityMonitor
             }
             if (entry.List == "none") addresses.Remove(ip);
             else addresses[ip] = entry.List;
+            recon.Reset();
+            flood.Reset();
+            dns.Reset();
             // Do not carry packets counted under a previous trust policy into the next evaluation.
             ResetWindow(window);
             foreach (var cooldown in cooldowns)
@@ -234,13 +282,13 @@ internal sealed class SecurityMonitor
         return counts.Count < CounterLimit ? counts[ip] = 1 : 0;
     }
 
-    private bool CanEmit(string rule, string? ip, DateTimeOffset time) =>
-        cooldowns.TryGetValue((rule, ip), out var until) ? time >= until : cooldowns.Count < CounterLimit;
+    private bool CanEmit(string rule, string? ip, DateTimeOffset time, string? scope = null) =>
+        cooldowns.TryGetValue((rule, ip, scope), out var until) ? time >= until : cooldowns.Count < CounterLimit;
 
-    private void Emit(PacketMetadata packet, string rule, string severity, string? ip, string evidence)
+    private void Emit(PacketMetadata packet, string rule, string severity, string? ip, string evidence, string? scope = null)
     {
-        if (!CanEmit(rule, ip, packet.Timestamp)) return;
-        cooldowns[(rule, ip)] = packet.Timestamp.AddSeconds(CooldownSeconds);
+        if (!CanEmit(rule, ip, packet.Timestamp, scope)) return;
+        cooldowns[(rule, ip, scope)] = packet.Timestamp.AddSeconds(CooldownSeconds);
         if (alerts.Count == AlertLimit) alerts.RemoveAt(AlertLimit - 1);
         alerts.Insert(0, new(Guid.NewGuid(), session, packet.Timestamp, rule, severity, "open", ip, evidence));
         revision++;

@@ -28,7 +28,11 @@ Require(ipv6Fragment is { SourcePort: null, DestinationPort: null }, "noninitial
 var loopback = Parse(LinkLayers.Null, "18000000" + ipv6.Replace("20010DB8000000000000000000000020", "00000000000000000000000000000001") + udp);
 Require(loopback.Direction == TrafficDirection.Local, "Npcap IPv6 loopback header");
 var icmp = Parse(LinkLayers.Ethernet, ethernet + "08004500001C0001000040010000CB007101CB0071020800000000000000");
-Require(icmp is { Direction: TrafficDirection.Unknown, SourcePort: null, Protocol: "ICMP" }, "unattributed IPv4 ICMP");
+Require(icmp is { Direction: TrafficDirection.Unknown, SourcePort: null, Protocol: "ICMP", IsEchoRequest: true }, "IPv4 ICMP echo request");
+var echoV6 = Parse(LinkLayers.Raw, ipv6.Replace("00081140", "00083A40") + "8000000000000000");
+Require(echoV6 is { ProtocolNumber: 58, IsEchoRequest: true }, "IPv6 ICMP echo request");
+var replyV6 = Parse(LinkLayers.Raw, ipv6.Replace("00081140", "00083A40") + "8100000000000000");
+Require(!replyV6.IsEchoRequest, "IPv6 ICMP echo reply");
 var fragment = Parse(LinkLayers.Ethernet, ethernet + "0800" + ipv4.Replace("00010000", "00010001") + tcp);
 Require(fragment is { Protocol: "TCP", SourcePort: null, DestinationPort: null }, "noninitial IPv4 fragment");
 Require(PacketMetadataParser.Parse(LinkLayers.Ethernet, [1, 2], now, 2, addresses) is null, "truncated frame");
@@ -75,6 +79,9 @@ Console.WriteLine("Capture fixtures passed for parsing, direction, flow aggregat
 GeoChecks.Run();
 AnalysisChecks.Run(sent);
 SecurityChecks.Run(sent);
+ReconChecks.Run(sent);
+FloodChecks.Run(sent);
+DnsChecks.Run();
 StorageChecks.Run(sent);
 if (Environment.GetEnvironmentVariable("PNS_MEASURE_ARCHIVE") == "1") StorageChecks.MeasureArchive(sent);
 if (Environment.GetEnvironmentVariable("PNS_TEST_DESKTOP_HOST") == "1") await DesktopChecks.RunAsync();
