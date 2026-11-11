@@ -1,18 +1,19 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Activity, Boxes, Cable, ChartNoAxesColumn, Globe2, History, LayoutDashboard,
-  RefreshCw, Search, Settings, Shield, ShieldAlert,
+  RefreshCw, Search, Settings, Shield, ShieldAlert, Wrench,
 } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import { CaptureAccessForm, CaptureControls, FlowPanel, PacketPanel } from './capture/CapturePages';
 import { useCaptureStream } from './capture/useCaptureStream';
 import { GeoSettingsPanel, IpIntelligence } from './geo/GeoPanels';
 import { ApplicationsPanel } from './capture/ApplicationsPanel';
-import { PacketHistoryPanel } from './capture/PacketHistoryPanel';
+import { HistoryWorkspace, StorageSettingsPanel } from './capture/StoragePanels';
 import { TrafficAnalytics } from './capture/TrafficAnalytics';
 import { SecurityPanel } from './security/SecurityPanel';
 
 const GlobePage = lazy(() => import('./globe/GlobePage'));
+const ToolsWorkspace = lazy(() => import('./tools/ToolsWorkspace').then(module => ({ default: module.ToolsWorkspace })));
 
 const pages = [
   { id: 'overview', title: 'Overview', detail: 'Traffic, destinations, and security activity for this device.', icon: LayoutDashboard },
@@ -25,6 +26,7 @@ const pages = [
   { id: 'intelligence', title: 'IP Intelligence', detail: 'Look up approximate locations and network ownership using local GeoIP files.', icon: Search },
   { id: 'history', title: 'Packet History', detail: 'Search and export retained packet metadata from the latest capture session.', icon: History },
   { id: 'settings', title: 'Settings', detail: 'Manage the local capture adapter.', icon: Settings },
+  { id: 'tools', title: 'Tools', detail: 'Diagnose connections, track local network changes, and compare captures.', icon: Wrench },
 ];
 
 type Health = 'checking' | 'ready' | 'offline';
@@ -121,9 +123,11 @@ export function App() {
           {page.id === 'packets' && <>{captureControls}<PacketPanel view={capture.view} /></>}
           {page.id === 'connections' && <FlowPanel view={capture.view} geo={capture.geo} />}
           {page.id === 'applications' && <ApplicationsPanel view={capture.view} />}
-          {page.id === 'history' && capture.code && <PacketHistoryPanel key={capture.view?.sessionId ?? 'idle'}
-            code={capture.code} sessionId={capture.view?.sessionId ?? null} />}
-          {page.id === 'settings' && <>{captureControls}{capture.code && <GeoSettingsPanel code={capture.code} />}</>}
+          {page.id === 'history' && capture.code && <HistoryWorkspace
+            code={capture.code} currentSession={capture.view?.sessionId ?? null} />}
+          {page.id === 'settings' && <>{captureControls}{capture.code && <>
+            <StorageSettingsPanel code={capture.code} /><GeoSettingsPanel code={capture.code} />
+          </>}</>}
           {page.id === 'intelligence' && capture.code && <IpIntelligence code={capture.code} flows={capture.view?.traffic?.recentFlows} />}
           {page.id === 'analytics' && <TrafficAnalytics view={capture.view} geo={capture.geo} samples={capture.samples} />}
           {page.id === 'map' && (
@@ -132,6 +136,9 @@ export function App() {
             </Suspense>
           )}
           {page.id === 'alerts' && capture.code && <SecurityPanel code={capture.code} summary={capture.security} />}
+          {page.id === 'tools' && capture.code && <Suspense fallback={<p role="status">Loading tools…</p>}>
+            <ToolsWorkspace code={capture.code} view={capture.view} />
+          </Suspense>}
         </div>
       </main>
     </div>

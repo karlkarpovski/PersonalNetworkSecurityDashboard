@@ -102,7 +102,7 @@ export function GeoSettingsPanel({ code }: { code: string }) {
       </>}
       <h3>Approximate map origin</h3>
       <p>{settings?.origin ? `Current origin: ${settings.origin.label} (${settings.origin.latitude.toFixed(2)}°, ${settings.origin.longitude.toFixed(2)}°).`
-        : 'Set a coarse location to draw live routes from this device.'} The setting lasts until the API restarts.</p>
+        : 'Set a coarse location to draw live routes from this device.'} The setting is saved locally.</p>
       <form className="capture-controls geo-origin-form" onSubmit={event => {
         event.preventDefault();
         void update('origin', mode === 'manual'

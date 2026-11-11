@@ -18,6 +18,7 @@ public sealed class CaptureSession(ILiveDevice device, HashSet<IPAddress> addres
 
     public TrafficAccumulator Traffic { get; } = new(TimeProvider.System);
     public Guid Id { get; } = Guid.NewGuid();
+    public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
     public bool Ended => Volatile.Read(ref ended) != 0;
     public long QueueDrops => Interlocked.Read(ref queueDrops);
     public long Skipped => Interlocked.Read(ref skipped);

@@ -2,18 +2,14 @@ import { useEffect, useState } from 'react';
 import { captureRequest } from './captureApi';
 import type { Packet, PacketHistory } from './captureApi';
 import { PacketTable } from './CapturePages';
+import { downloadText, encodeCsv } from './download';
 
 function toCsv(packets: Packet[]) {
-  const encode = (value: unknown) => {
-    const text = value == null ? '' : String(value);
-    const safe = /^[\s]*[=+\-@]|^[\t\r\n]/.test(text) ? "'" + text : text;
-    return '"' + safe.replaceAll('"', '""') + '"';
-  };
   const rows = packets.map(packet => [
     packet.timestamp, packet.direction, packet.source, packet.sourcePort, packet.destination, packet.destinationPort,
     packet.protocol, packet.length, packet.owner?.process.name, packet.owner?.process.pid, packet.owner?.method,
-  ].map(encode).join(','));
-  return ['Timestamp,Direction,Source,Source port,Destination,Destination port,Protocol,Bytes,Process,PID,Attribution', ...rows].join('\r\n');
+  ]);
+  return 'Timestamp,Direction,Source,Source port,Destination,Destination port,Protocol,Bytes,Process,PID,Attribution\r\n' + encodeCsv(rows);
 }
 
 export function PacketHistoryPanel({ code, sessionId }: { code: string; sessionId: string | null }) {
@@ -57,14 +53,8 @@ export function PacketHistoryPanel({ code, sessionId }: { code: string; sessionI
       const history = await captureRequest<PacketHistory>(code, `history?${parameters(10000)}`);
       if (!history.packets.length) { setError('No retained packets match the export filter.'); return; }
       const csv = format === 'csv';
-      const blob = new Blob([csv ? toCsv(history.packets) : JSON.stringify(history, null, 2)],
-        { type: csv ? 'text/csv;charset=utf-8' : 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `packet-metadata.${format}`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadText(`packet-metadata.${format}`, csv ? toCsv(history.packets) : JSON.stringify(history, null, 2),
+        csv ? 'text/csv;charset=utf-8' : 'application/json');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Export failed.');
     } finally {

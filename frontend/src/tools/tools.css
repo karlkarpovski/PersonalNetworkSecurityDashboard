@@ -1,0 +1,9 @@
+.tools-mode button[aria-pressed="true"] { box-shadow: var(--inset); border-color: var(--cyan); }
+.tools-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .65rem; }
+.tools-results div { padding: .7rem; border-radius: .65rem; box-shadow: var(--inset); }
+.tools-results dt { font-weight: 650; }
+.tools-results dd { margin: .25rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.tools-log { list-style: none; padding: 0 .3rem; max-height: 22rem; overflow: auto; }
+.tools-log li { display: grid; gap: .25rem .6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); padding: .5rem 0; border-bottom: 1px solid var(--edge); }
+.tools-log time { color: var(--muted); font-size: .8rem; }
+.tools-export label { display: flex; flex: 0 1 auto; align-items: center; gap: .5rem; }

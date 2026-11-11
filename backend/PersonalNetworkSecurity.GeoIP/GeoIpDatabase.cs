@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using MaxMind.Db;
 using MaxMind.GeoIP2;
 
@@ -10,6 +11,7 @@ public sealed record GeoResult(string Ip, string AddressKind, string Status, str
 
 public sealed record GeoFileStatus(string FileName, string State, string? DatabaseType, string? Warning);
 public sealed record GeoDatabaseStatus(string Directory, GeoFileStatus City, GeoFileStatus Asn);
+public sealed record GeoCacheSnapshot(string Version, GeoResult[] Entries);
 
 public sealed class GeoIpDatabase : IDisposable
 {
@@ -22,6 +24,7 @@ public sealed class GeoIpDatabase : IDisposable
     private readonly Slot asn = new("GeoLite2-ASN.mmdb", "ASN");
     private readonly string directory;
     private bool disposed;
+    private long cacheRevision;
 
     public GeoIpDatabase(string directory)
     {
@@ -46,6 +49,7 @@ public sealed class GeoIpDatabase : IDisposable
                 city.Replace(cityReplacement);
                 asn.Replace(asnReplacement);
                 cache.Clear();
+                cacheRevision++;
                 return new(directory, city.Status, asn.Status);
             }
         }
@@ -64,9 +68,33 @@ public sealed class GeoIpDatabase : IDisposable
             var result = Lookup(address);
             if (cache.Count == CacheCapacity) cache.Clear();
             cache[address] = result;
+            cacheRevision++;
             return result;
         }
     }
+
+    public GeoCacheSnapshot? CaptureCache(ref long revision)
+    {
+        lock (gate)
+        {
+            if (revision == cacheRevision) return null;
+            revision = cacheRevision;
+            return new(CacheVersion(), city.Reader is null && asn.Reader is null ? [] : cache.Values.ToArray());
+        }
+    }
+
+    public void RestoreCache(GeoCacheSnapshot snapshot)
+    {
+        lock (gate)
+        {
+            if (snapshot.Version != CacheVersion() || city.Reader is null && asn.Reader is null) return;
+            foreach (var entry in snapshot.Entries.Take(CacheCapacity))
+                if (IpClassifier.Parse(entry.Ip) is { } address && IpClassifier.Classify(address) == "public")
+                    cache.TryAdd(address, entry);
+        }
+    }
+
+    private string CacheVersion() => $"{city.Fingerprint ?? "-"}:{asn.Fingerprint ?? "-"}";
 
     private GeoResult Lookup(IPAddress address)
     {
@@ -89,29 +117,31 @@ public sealed class GeoIpDatabase : IDisposable
             network?.AutonomousSystemOrganization);
     }
 
-    private (DatabaseReader? Reader, string? Warning, bool Missing) Load(Slot slot)
+    private (DatabaseReader? Reader, string? Fingerprint, string? Warning, bool Missing) Load(Slot slot)
     {
         try
         {
             using var stream = new FileStream(Path.Combine(directory, slot.FileName), FileMode.Open, FileAccess.Read,
                 FileShare.Read | FileShare.Delete);
             if (stream.Length is <= 0 or > MaximumFileBytes)
-                return (null, "The file is empty or larger than 256 MB.", false);
+                return (null, null, "The file is empty or larger than 256 MB.", false);
+            var fingerprint = Convert.ToHexString(SHA256.HashData(stream));
+            stream.Position = 0;
             var reader = new DatabaseReader(stream);
             if (reader.Metadata.DatabaseType != $"GeoLite2-{slot.Kind}" && reader.Metadata.DatabaseType != $"GeoIP2-{slot.Kind}")
             {
                 reader.Dispose();
-                return (null, $"The file is not a MaxMind {slot.Kind} database.", false);
+                return (null, null, $"The file is not a MaxMind {slot.Kind} database.", false);
             }
-            return (reader, null, false);
+            return (reader, fingerprint, null, false);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            return (null, "The database file is missing.", true);
+            return (null, null, "The database file is missing.", true);
         }
         catch (Exception ex) when (IsDatabaseError(ex) || ex is UnauthorizedAccessException)
         {
-            return (null, "The file is unreadable or is not a valid MaxMind database.", false);
+            return (null, null, "The file is unreadable or is not a valid MaxMind database.", false);
         }
     }
 
@@ -137,14 +167,16 @@ public sealed class GeoIpDatabase : IDisposable
         public string FileName { get; } = fileName;
         public string Kind { get; } = kind;
         public DatabaseReader? Reader { get; private set; }
+        public string? Fingerprint { get; private set; }
         public GeoFileStatus Status { get; private set; } = new(fileName, "missing", null, null);
 
-        public void Replace((DatabaseReader? Reader, string? Warning, bool Missing) replacement)
+        public void Replace((DatabaseReader? Reader, string? Fingerprint, string? Warning, bool Missing) replacement)
         {
             if (replacement.Reader is { } next)
             {
                 Reader?.Dispose();
                 Reader = next;
+                Fingerprint = replacement.Fingerprint;
             }
             Status = new(FileName, Reader is not null ? "ready" : replacement.Missing ? "missing" : "invalid",
                 Reader?.Metadata.DatabaseType, replacement.Warning);

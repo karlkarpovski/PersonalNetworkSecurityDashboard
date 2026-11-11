@@ -2,13 +2,15 @@ using System.Net;
 using System.Net.NetworkInformation;
 using PersonalNetworkSecurity.Capture;
 using SharpPcap;
+using Microsoft.Data.Sqlite;
 
 internal sealed record AdapterInfo(string Id, string Name, string? LinkStatus);
 internal sealed record AdapterResult(AdapterInfo[] Adapters, string? Error);
 internal sealed record CaptureView(Guid? SessionId, string State, string? Adapter, string? Message, TrafficSnapshot? Traffic,
     long QueueDrops, long SkippedFrames, uint? DriverDrops);
 
-internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePorts ports, SecurityMonitor security) : BackgroundService
+internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePorts ports, SecurityMonitor security,
+    CaptureGeography geography, LocalStore store) : BackgroundService
 {
     private const string DriverMissing = "Npcap is unavailable. Install the Windows Npcap driver, then refresh adapters.";
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -20,6 +22,9 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
     private string? message;
     private uint? driverDrops;
     private bool shuttingDown;
+    private bool archivePending;
+    private long savedSequence;
+    private DateTimeOffset nextCheckpoint, nextPrune;
 
     public async Task<AdapterResult> GetAdaptersAsync()
     {
@@ -60,6 +65,11 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
         {
             if (shuttingDown) return (503, "The local service is shutting down.");
             if (current is not null) return (409, "Stop the current capture before starting another session.");
+            if (archivePending)
+            {
+                Persist(previous, force: true);
+                if (archivePending) return (503, "Local storage could not save the previous capture. Retry after checking the database.");
+            }
             var device = Enumerate().FirstOrDefault(item => item.Name == id);
             if (device is null) return (404, "That adapter is no longer available. Refresh the adapter list.");
 
@@ -76,6 +86,8 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
             state = "running";
             message = null;
             driverDrops = null;
+            savedSequence = 0;
+            nextCheckpoint = DateTimeOffset.UtcNow;
             return (204, null);
         }
         catch (Exception ex) when (IsCaptureError(ex))
@@ -115,9 +127,10 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
         try
         {
             var session = current ?? previous;
-            if (session is null || sessionId is not null && sessionId != session.Id)
-                return new(session?.Id, [], null, 0);
-            return session.Traffic.History(session.Id, search, before, limit);
+            if (session is not null && (sessionId is null || sessionId == session.Id))
+                return session.Traffic.History(session.Id, search, before, limit);
+            var archived = sessionId ?? store.Sessions().FirstOrDefault()?.Id;
+            return archived is { } id ? store.History(id, search, before, limit) : new(null, [], null, 0);
         }
         finally { gate.Release(); }
     }
@@ -132,6 +145,7 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
                 await gate.WaitAsync(stoppingToken);
                 try
                 {
+                    Persist(current ?? (archivePending ? previous : null), force: current is null && archivePending);
                     if (current is null) continue;
                     var interfaces = NetworkInterface.GetAllNetworkInterfaces();
                     var adapter = FindInterface(interfaces, interfaceId);
@@ -156,7 +170,7 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
         finally
         {
             await gate.WaitAsync();
-            try { shuttingDown = true; await EndAsync(null); }
+            try { shuttingDown = true; await EndAsync(null); Persist(archivePending ? previous : null, force: true); }
             finally { gate.Release(); }
         }
     }
@@ -166,10 +180,42 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
         if (current is not { } session) return;
         ReadDriverDrops(session);
         var closed = await CloseAsync(session);
+        Persist(session, force: true);
         current = null;
         previous = session;
         message = error ?? (closed ? null : "The driver reported a problem while closing capture.");
         state = message is null ? "stopped" : "error";
+    }
+
+    private void Persist(CaptureSession? capture, bool force)
+    {
+        var now = DateTimeOffset.UtcNow;
+        try
+        {
+            if (capture is not null && (force || now >= nextCheckpoint))
+            {
+                if (force) archivePending = true;
+                var (summary, packets) = capture.Traffic.ArchiveSnapshot(savedSequence, !force);
+                store.Checkpoint(capture.Id, activeAdapter ?? "Adapter", capture.StartedAt, summary, packets);
+                if (packets.Length > 0) savedSequence = packets[^1].Sequence;
+                archivePending = false;
+                nextCheckpoint = now.AddSeconds(10);
+            }
+            security.Flush();
+            if (now >= nextPrune)
+            {
+                geography.FlushCache();
+                store.Prune();
+                nextPrune = now.AddMinutes(1);
+            }
+            else if (force) geography.FlushCache();
+            store.CheckpointWarning = null;
+        }
+        catch (SqliteException error)
+        {
+            store.CheckpointWarning = "A database write failed. Recent capture data may be missing from the archive.";
+            logger.LogWarning("A local storage write failed with SQLite code {Code}.", error.SqliteErrorCode);
+        }
     }
 
     private void ReadDriverDrops(CaptureSession session)

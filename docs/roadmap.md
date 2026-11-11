@@ -78,7 +78,7 @@ The local SVG basemap uses [Natural Earth 1:110m land](https://github.com/nvkels
 | 7 | Windows socket attribution, packet history and traffic analytics | Check tuple matching, PID reuse and ambiguous UDP ownership against Windows observations |
 | 8 | Evidence-based rules, watchlists and alert actions | Check threshold windows, suppression, evidence text and acknowledgement behavior |
 | 9 | SQLite migrations, retention, settings and CSV/JSON exports | Exercise restart, migration, retention, interrupted writes and export safety |
-| 10 | Performance, accessibility and Windows packaging | Run automated suites, stress and offline tests, then install and capture on supported Windows 10 and 11 systems |
+| 10 | Performance, accessibility and Windows packaging | Run the fixture suite, verify the extracted Windows ZIP, and check loopback capture and shutdown on the test host. Validate installation on both Windows 10 and 11 before broad distribution. |
 
 ## Prerequisites
 

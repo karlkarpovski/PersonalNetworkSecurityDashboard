@@ -3,6 +3,7 @@ import { captureRequest } from '../capture/captureApi';
 import { ruleNames } from './securityTypes';
 import type { AddressRule, AlertSummary, SecurityAlert, SecuritySettings } from './securityTypes';
 import './security.css';
+import { downloadText, encodeCsv } from '../capture/download';
 
 const put = (body: object): RequestInit => ({
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -109,6 +110,15 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
           </select></label>
         </div>
         <p>Alerts describe observed events and configured rules. Monitoring never changes the firewall.</p>
+        <div className="capture-controls history-pagination">
+          <button className="capture-button" type="button" disabled={!filtered.length}
+            onClick={() => downloadText('security-alerts.json', JSON.stringify(filtered, null, 2), 'application/json')}>Export alerts JSON</button>
+          <button className="capture-button" type="button" disabled={!filtered.length} onClick={() =>
+            downloadText('security-alerts.csv', encodeCsv([
+              ['Observed', 'Rule', 'Severity', 'State', 'Remote IP', 'Evidence'],
+              ...filtered.map(alert => [alert.observedAt, alert.rule, alert.severity, alert.state, alert.remoteIp, alert.evidence]),
+            ]), 'text/csv;charset=utf-8')}>Export alerts CSV</button>
+        </div>
         {inspected ? <div className="security-layout">
           <ul className="security-list">
             {filtered.map(alert => <li key={alert.id}><button className="capture-button security-alert-row"

@@ -44,6 +44,7 @@
   background-image: radial-gradient(ellipse at center, #183455 0, #0b1628 58%, #080f1b 100%);
 }
 .globe-canvas { position: absolute; inset: 0; }
+.globe-canvas:focus-visible { outline-offset: -4px; }
 .globe-canvas canvas { display: block; cursor: grab; }
 .globe-canvas canvas:active { cursor: grabbing; }
 .globe-camera { position: absolute; display: grid; gap: .5rem; top: .8rem; right: .8rem; }

@@ -6,9 +6,39 @@ internal sealed record GeoOrigin(string Mode, double Latitude, double Longitude,
 internal sealed record GeoSettings(GeoDatabaseStatus Databases, OriginRequest? Configuration, GeoOrigin? Origin);
 internal sealed record GeoSnapshot(GeoOrigin? Origin, GeoResult[] Endpoints);
 
-internal sealed class CaptureGeography(GeoIpDatabase database)
+internal sealed class CaptureGeography
 {
+    private readonly object originGate = new();
+    private readonly GeoIpDatabase database;
+    private readonly LocalStore? store;
     private OriginRequest? configuration;
+    private long savedCacheRevision = 1;
+
+    public CaptureGeography(GeoIpDatabase database, LocalStore? store = null)
+    {
+        this.database = database;
+        this.store = store;
+        configuration = store?.ReadSetting<OriginRequest>("origin");
+        if (store?.ReadGeoCache() is { } cache) database.RestoreCache(cache);
+    }
+
+    public void FlushCache()
+    {
+        if (store is null) return;
+        var revision = savedCacheRevision;
+        if (database.CaptureCache(ref revision) is not { } cache) return;
+        store.SaveGeoCache(cache);
+        savedCacheRevision = revision;
+    }
+
+    private void SaveOrigin(OriginRequest? value)
+    {
+        lock (originGate)
+        {
+            store?.SaveSetting("origin", value);
+            Volatile.Write(ref configuration, value);
+        }
+    }
 
     public GeoSettings Settings()
     {
@@ -29,19 +59,19 @@ internal sealed class CaptureGeography(GeoIpDatabase database)
         switch (request.Mode)
         {
             case "none":
-                Volatile.Write(ref configuration, null);
+                SaveOrigin(null);
                 return null;
             case "manual":
                 if (request.Latitude is not (>= -90 and <= 90) || request.Longitude is not (>= -180 and <= 180))
                     return "Enter a latitude from −90 to 90 and a longitude from −180 to 180.";
                 var label = request.Label?.Trim();
                 if (label?.Length > 80) return "Use an origin label of 80 characters or fewer.";
-                Volatile.Write(ref configuration, request with { Label = label, Ip = null });
+                SaveOrigin(request with { Label = label, Ip = null });
                 return null;
             case "public-ip":
                 if (Lookup(request.Ip) is not { Status: "located" } located)
                     return "Enter a public address with coordinates in the local City database.";
-                Volatile.Write(ref configuration, new OriginRequest("public-ip", null, null, null, located.Ip));
+                SaveOrigin(new OriginRequest("public-ip", null, null, null, located.Ip));
                 return null;
             default:
                 return "Choose a supported origin mode.";

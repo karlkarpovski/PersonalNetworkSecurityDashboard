@@ -69,15 +69,16 @@ export type Adapter = { id: string; name: string; linkStatus: string | null };
 export type AdapterResult = { adapters: Adapter[]; error: string | null };
 
 export class CaptureAccessDenied extends Error {}
+export const desktopSession = 'desktop';
 
-export async function captureRequest<T>(code: string, path: string, options: RequestInit = {}): Promise<T> {
+export async function captureRequest<T>(code: string, path: string, options: RequestInit = {}, timeout = 8000): Promise<T> {
   const response = await fetch(`/api/capture/${path}`, {
     ...options,
     cache: 'no-store',
     signal: options.signal
-      ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)])
-      : AbortSignal.timeout(8000),
-    headers: { Authorization: `Bearer ${code}`, ...options.headers },
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)])
+      : AbortSignal.timeout(timeout),
+    headers: code === desktopSession ? options.headers : { Authorization: `Bearer ${code}`, ...options.headers },
   });
   if (response.status === 401) throw new CaptureAccessDenied('The dashboard access code expired or was rejected.');
   if (!response.ok) {

@@ -132,6 +132,16 @@ public sealed class TrafficAccumulator(TimeProvider time)
             yield return packets[(index - 1) % HistoryLimit]!;
     }
 
+    public PacketMetadata[] PacketsAfter(long checkpoint)
+    {
+        lock (gate) return ReadPackets().TakeWhile(packet => packet.Sequence > checkpoint).Reverse().ToArray();
+    }
+
+    public (TrafficSnapshot Summary, PacketMetadata[] Packets) ArchiveSnapshot(long checkpoint, bool running)
+    {
+        lock (gate) return (Snapshot(running), PacketsAfter(checkpoint));
+    }
+
     private static bool Matches(PacketMetadata packet, string query) =>
         packet.Source.Contains(query, StringComparison.OrdinalIgnoreCase)
         || packet.Destination.Contains(query, StringComparison.OrdinalIgnoreCase)

@@ -9,13 +9,15 @@ internal sealed record SecurityAlert(Guid Id, Guid SessionId, DateTimeOffset Obs
 internal sealed record AlertSummary(long Revision, int Open, SecurityAlert[] Recent, string[] FlaggedIps);
 internal sealed record SecuritySettings(AlertRules Rules, AddressRule[] Addresses);
 
-internal sealed class SecurityMonitor(CaptureGeography geography)
+internal sealed class SecurityMonitor
 {
     private const int WindowSeconds = 10;
     private const int CooldownSeconds = 30;
     private const int CounterLimit = 4096;
     private const int AlertLimit = 200;
     private readonly object gate = new();
+    private readonly CaptureGeography geography;
+    private readonly LocalStore? store;
     private readonly List<SecurityAlert> alerts = [];
     private readonly Dictionary<string, string> addresses = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Rule, string? Ip), DateTimeOffset> cooldowns = new();
@@ -29,6 +31,19 @@ internal sealed class SecurityMonitor(CaptureGeography geography)
     private long window = -1;
     private long bytes;
     private long revision;
+    private long savedRevision;
+
+    public SecurityMonitor(CaptureGeography geography, LocalStore? store = null)
+    {
+        this.geography = geography;
+        this.store = store;
+        if (store?.ReadSetting<SecuritySettings>("security") is { } settings)
+        {
+            rules = settings.Rules;
+            foreach (var address in settings.Addresses) addresses[address.Ip] = address.List;
+        }
+        if (store is not null) alerts.AddRange(store.Alerts());
+    }
 
     public void Observe(Guid sessionId, PacketMetadata packet)
     {
@@ -119,8 +134,10 @@ internal sealed class SecurityMonitor(CaptureGeography geography)
                 code is null || code.Length != 2 || !code.All(char.IsAsciiLetter)) == true) return false;
         lock (gate)
         {
-            rules = updated with { Ports = updated.Ports?.Distinct().ToArray(),
+            var next = updated with { Ports = updated.Ports?.Distinct().ToArray(),
                 Countries = updated.Countries?.Select(code => code.ToUpperInvariant()).Distinct().ToArray() };
+            store?.SaveSetting("security", Settings() with { Rules = next });
+            rules = next;
             ResetWindow(window);
             cooldowns.Clear();
             return true;
@@ -134,9 +151,15 @@ internal sealed class SecurityMonitor(CaptureGeography geography)
         var ip = address.ToString();
         lock (gate)
         {
+            if (entry.List != "none" && addresses.Count >= 256 && !addresses.ContainsKey(ip)) return false;
+            if (store is not null)
+            {
+                var next = Settings().Addresses.Where(address => address.Ip != ip).ToList();
+                if (entry.List != "none") next.Add(new(ip, entry.List));
+                store.SaveSetting("security", new SecuritySettings(rules, next.ToArray()));
+            }
             if (entry.List == "none") addresses.Remove(ip);
-            else if (addresses.Count < 256 || addresses.ContainsKey(ip)) addresses[ip] = entry.List;
-            else return false;
+            else addresses[ip] = entry.List;
             // Do not carry packets counted under a previous trust policy into the next evaluation.
             ResetWindow(window);
             foreach (var cooldown in cooldowns)
@@ -166,10 +189,31 @@ internal sealed class SecurityMonitor(CaptureGeography geography)
             if (index < 0 || alerts[index].State == "dismissed" && state != "dismissed") return false;
             if (alerts[index].State != state)
             {
-                alerts[index] = alerts[index] with { State = state };
+                var changed = alerts[index] with { State = state };
+                if (store is not null)
+                {
+                    var next = alerts.ToArray();
+                    next[index] = changed;
+                    store.SaveAlerts(next);
+                }
+                alerts[index] = changed;
                 revision++;
+                if (store is not null) savedRevision = revision;
             }
             return true;
+        }
+    }
+
+    public void Flush()
+    {
+        if (store is null) return;
+        lock (gate)
+        {
+            var cutoff = store.Cutoff;
+            if (alerts.RemoveAll(alert => alert.ObservedAt < cutoff) > 0) revision++;
+            if (revision == savedRevision) return;
+            store.SaveAlerts(alerts);
+            savedRevision = revision;
         }
     }
 

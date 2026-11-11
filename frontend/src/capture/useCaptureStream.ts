@@ -1,6 +1,6 @@
 import { HubConnectionBuilder, HubConnectionState, HttpTransportType, LogLevel } from '@microsoft/signalr';
 import { useEffect, useState } from 'react';
-import { CaptureAccessDenied, captureRequest } from './captureApi';
+import { CaptureAccessDenied, captureRequest, desktopSession } from './captureApi';
 import type { CaptureView } from './captureApi';
 import type { GeoSnapshot } from '../geo/geoTypes';
 import type { AlertSummary } from '../security/securityTypes';
@@ -29,7 +29,10 @@ export function useCaptureStream() {
     if (!code) return;
     const lifetime = new AbortController();
     const connection = new HubConnectionBuilder()
-      .withUrl('/api/capture/live', { transport: HttpTransportType.WebSockets, accessTokenFactory: () => code })
+      .withUrl('/api/capture/live', {
+        transport: HttpTransportType.WebSockets,
+        accessTokenFactory: code === desktopSession ? undefined : () => code,
+      })
       .configureLogging(LogLevel.None)
       .withAutomaticReconnect([0, 1000, 3000, 5000])
       .build();

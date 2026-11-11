@@ -1,6 +1,6 @@
 import {
   AdditiveBlending, BufferGeometry, ConeGeometry, Group, Mesh, MeshBasicMaterial,
-  PerspectiveCamera, Quaternion, Raycaster, Scene, ShaderMaterial, SphereGeometry,
+  PerspectiveCamera, Quaternion, Raycaster, Scene, ShaderMaterial, SphereGeometry, Spherical,
   SRGBColorSpace, Texture, TextureLoader, TubeGeometry, Vector2, Vector3, WebGLRenderer, Curve, MathUtils,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -147,6 +147,13 @@ export function renderGlobe(
     dirty = true;
   });
   resize.observe(host);
+  let visible = true;
+  const intersection = new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    previousTime = undefined;
+    dirty = true;
+  });
+  intersection.observe(host);
 
   function cast(event: MouseEvent) {
     const rect = canvas.getBoundingClientRect();
@@ -184,6 +191,7 @@ export function renderGlobe(
   canvas.addEventListener('webglcontextlost', contextLost);
   controls.addEventListener('change', () => { dirty = true; });
   renderer.setAnimationLoop(time => {
+    if (!visible || document.hidden) return;
     const dt = Math.min((time - (previousTime ?? time)) / 1000, 0.05);
     previousTime = time;
     if (focusing) {
@@ -207,6 +215,12 @@ export function renderGlobe(
 
   return {
     reset,
+    rotate(horizontal: number, vertical: number) {
+      const angle = new Spherical().setFromVector3(focusing ? targetCamera : camera.position);
+      angle.theta += horizontal;
+      angle.phi = MathUtils.clamp(angle.phi + vertical, 0.02, Math.PI - 0.02);
+      focus(new Vector3().setFromSpherical(angle), angle.radius);
+    },
     zoom(factor: number) { focus(camera.position, MathUtils.clamp(camera.position.length() * factor, 1.45, 6)); },
     focusOn(location: Location) { focus(position(location)); },
     setMotion(animate: boolean, rotate: boolean, rate: number) {
@@ -275,6 +289,7 @@ export function renderGlobe(
     dispose() {
       disposed = true;
       resize.disconnect();
+      intersection.disconnect();
       renderer.setAnimationLoop(null);
       canvas.removeEventListener('pointerdown', pointerDown);
       canvas.removeEventListener('click', click);

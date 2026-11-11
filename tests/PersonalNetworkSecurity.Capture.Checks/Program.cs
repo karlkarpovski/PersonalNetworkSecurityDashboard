@@ -58,11 +58,13 @@ traffic.ExpireIdleFlows();
 Require(traffic.Snapshot(true) is { ActiveFlows: 0, UniqueRemoteIps: 2 }, "flow expiry preserves session destination count");
 
 var stress = new TrafficAccumulator(time);
+var stressTimer = System.Diagnostics.Stopwatch.StartNew();
 for (var i = 0; i < 100_000; i++)
 {
     var remote = $"2001:db8::{i:x}";
     stress.Add(sent with { Destination = remote, Timestamp = time.GetUtcNow() });
 }
+Console.WriteLine($"100,000 metadata updates took {stressTimer.Elapsed.TotalMilliseconds:N0} ms.");
 Require(stress.Snapshot(true) is
     { ActiveFlows: 4096, UniqueRemoteIps: 4096, RemoteIpLimitReached: true, FlowCapacityMisses: 95904,
       OutboundPackets: 100000, RecentPackets.Length: 200, RecentFlows.Length: 50 }, "bounded storage at 100,000 frames");
@@ -73,6 +75,9 @@ Console.WriteLine("Capture fixtures passed for parsing, direction, flow aggregat
 GeoChecks.Run();
 AnalysisChecks.Run(sent);
 SecurityChecks.Run(sent);
+StorageChecks.Run(sent);
+if (Environment.GetEnvironmentVariable("PNS_MEASURE_ARCHIVE") == "1") StorageChecks.MeasureArchive(sent);
+if (Environment.GetEnvironmentVariable("PNS_TEST_DESKTOP_HOST") == "1") await DesktopChecks.RunAsync();
 
 static void Require(bool condition, string check)
 {

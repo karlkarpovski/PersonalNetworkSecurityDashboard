@@ -131,7 +131,16 @@ export default function GlobePage({ flows = noFlows, geo, flaggedIps = noFlags }
       <div className="globe-layout">
         <div className="globe-visualization">
           <div className="globe-stage inset-surface">
-            <div className="globe-canvas" ref={host} />
+            <div className="globe-canvas" ref={host} tabIndex={0} role="region"
+              aria-label="Interactive globe" aria-describedby="globe-controls-hint" onKeyDown={event => {
+                const movement = {
+                  ArrowLeft: [-0.17, 0], ArrowRight: [0.17, 0],
+                  ArrowUp: [0, -0.17], ArrowDown: [0, 0.17],
+                }[event.key];
+                if (!movement || !engine.current) return;
+                event.preventDefault();
+                engine.current.rotate(movement[0], movement[1]);
+              }} />
             {error && <p className="globe-error" role="alert">{error}</p>}
             <div className="globe-camera" aria-label="Camera controls">
               <button className="icon-button" type="button" aria-label="Zoom in" title="Zoom in"
@@ -141,7 +150,7 @@ export default function GlobePage({ flows = noFlows, geo, flaggedIps = noFlags }
               <button className="icon-button" type="button" aria-label="Reset camera" title="Reset camera"
                 onClick={() => engine.current?.reset()}><RotateCcw size={16} aria-hidden="true" /></button>
             </div>
-            <span className="panel-chip globe-caption">Drag to rotate · Scroll to zoom · Double-click to focus</span>
+            <span className="panel-chip globe-caption" id="globe-controls-hint">Drag or use arrow keys to rotate · Scroll to zoom · Double-click to focus</span>
           </div>
           <ul className="legend globe-legend" aria-label="Route legend">
             <li><i className="dot outbound" /> Outbound</li>

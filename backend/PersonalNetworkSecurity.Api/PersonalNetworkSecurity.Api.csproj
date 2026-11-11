@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <InternalsVisibleTo Include="PersonalNetworkSecurity.Capture.Checks" />
     <ProjectReference Include="../PersonalNetworkSecurity.Capture/PersonalNetworkSecurity.Capture.csproj" />
     <ProjectReference Include="../PersonalNetworkSecurity.GeoIP/PersonalNetworkSecurity.GeoIP.csproj" />
