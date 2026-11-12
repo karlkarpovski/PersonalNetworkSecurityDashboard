@@ -9,7 +9,8 @@ internal sealed record AlertRules(int BandwidthMiB = 50, int Destinations = 50, 
     int UdpKiBRate = 0, int IcmpPacketRate = 0, int PendingConnections = 0,
     int DnsWindowSeconds = 30, int DnsTunnelingNames = 0, int DnsLabelLength = 30,
     int DnsQueries = 0, int DnsNxDomains = 0, bool DnsConflictingReplies = false,
-    string[]? DnsBlockedDomains = null, string[]? DnsExcludedDomains = null, int[]? DnsAllowedTypes = null);
+    string[]? DnsBlockedDomains = null, string[]? DnsExcludedDomains = null, int[]? DnsAllowedTypes = null,
+    OutboundRules? Outbound = null);
 internal sealed record AddressRule(string Ip, string List);
 internal sealed record SecurityAlert(Guid Id, Guid SessionId, DateTimeOffset ObservedAt, string Rule, string Severity,
     string State, string? RemoteIp, string Evidence);
@@ -36,6 +37,7 @@ internal sealed class SecurityMonitor
     private readonly ReconDetection recon = new();
     private readonly FloodDetection flood = new();
     private readonly DnsDetection dns = new();
+    private OutboundDetection? outboundDetection;
     private AlertRules rules = new();
     private Guid session;
     private long window = -1;
@@ -50,6 +52,7 @@ internal sealed class SecurityMonitor
         if (store?.ReadSetting<SecuritySettings>("security") is { } settings)
         {
             rules = settings.Rules;
+            if (rules.Outbound is { } configured) outboundDetection = new(configured);
             foreach (var address in settings.Addresses) addresses[address.Ip] = address.List;
         }
         if (store is not null) alerts.AddRange(store.Alerts());
@@ -70,6 +73,7 @@ internal sealed class SecurityMonitor
                 recon.Reset();
                 flood.Reset();
                 dns.Reset();
+                outboundDetection?.Reset();
                 ResetWindow(tick);
             }
             if (tick < window) return;
@@ -119,6 +123,9 @@ internal sealed class SecurityMonitor
                 dns.Observe(packet, message, rules, (rule, severity, scope, evidence) =>
                     Emit(packet, rule, severity, ip, evidence, scope));
 
+            outboundDetection?.Observe(packet, ip, (rule, severity, scope, evidence) =>
+                Emit(packet, rule, severity, rule == "threat-intel-match" && scope != ip ? null : ip, evidence, scope));
+
             if (packet.Tcp is not { } tcp || packet.SourcePort is null || packet.DestinationPort is null
                 || (rules.SynPackets == 0 && rules.RefusedAttempts == 0)) return;
             var tuple = FlowKey.ForPacket(packet);
@@ -167,6 +174,7 @@ internal sealed class SecurityMonitor
             || updated.DnsNxDomains is < 0 or > CounterLimit || updated.DnsAllowedTypes is { Length: > 128 }
             || updated.DnsAllowedTypes?.Any(type => type is < 1 or > 65535) == true
             || !DnsDetection.ValidDomains(updated.DnsBlockedDomains) || !DnsDetection.ValidDomains(updated.DnsExcludedDomains)
+            || updated.Outbound is { } outbound && !OutboundDetection.Valid(outbound)
             || updated.Ports is { Length: > 32 } || updated.Ports?.Any(port => port is < 1 or > 65535) == true
             || updated.Countries is { Length: > 32 } || updated.Countries?.Any(code =>
                 code is null || code.Length != 2 || !code.All(char.IsAsciiLetter)) == true) return false;
@@ -180,6 +188,7 @@ internal sealed class SecurityMonitor
                 DnsExcludedDomains = DnsDetection.NormalizeDomains(updated.DnsExcludedDomains) };
             store?.SaveSetting("security", Settings() with { Rules = next });
             rules = next;
+            outboundDetection = next.Outbound is { } configured ? new(configured) : null;
             ResetWindow(window);
             recon.Reset();
             flood.Reset();
@@ -208,6 +217,7 @@ internal sealed class SecurityMonitor
             recon.Reset();
             flood.Reset();
             dns.Reset();
+            outboundDetection?.Reset();
             // Do not carry packets counted under a previous trust policy into the next evaluation.
             ResetWindow(window);
             foreach (var cooldown in cooldowns)

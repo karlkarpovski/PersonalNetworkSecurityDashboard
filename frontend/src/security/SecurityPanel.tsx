@@ -3,6 +3,7 @@ import { captureRequest } from '../capture/captureApi';
 import { ruleNames } from './securityTypes';
 import type { AddressRule, AlertSummary, SecurityAlert, SecuritySettings } from './securityTypes';
 import './security.css';
+import { OutboundFields, outboundDraft, outboundPayload } from './OutboundFields';
 import { downloadText, encodeCsv } from '../capture/download';
 
 const put = (body: object): RequestInit => ({
@@ -37,6 +38,7 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
   const [history, setHistory] = useState<SecurityAlert[]>([]);
   const [settings, setSettings] = useState<SecuritySettings>();
   const [rules, setRules] = useState<ThresholdDraft>();
+  const [outbound, setOutbound] = useState(outboundDraft);
   const [dnsBlocked, setDnsBlocked] = useState('');
   const [dnsExcluded, setDnsExcluded] = useState('');
   const [dnsTypes, setDnsTypes] = useState('');
@@ -61,6 +63,7 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
       if (controller.signal.aborted) return;
       setSettings(result);
       setRules(result.rules);
+      setOutbound(outboundDraft(result.rules.outbound));
       setDnsBlocked(result.rules.dnsBlockedDomains?.join(', ') ?? '');
       setDnsExcluded(result.rules.dnsExcludedDomains?.join(', ') ?? '');
       setDnsTypes(result.rules.dnsAllowedTypes?.join(', ') ?? '');
@@ -103,9 +106,10 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
       const result = await captureRequest<SecuritySettings>(code, 'security/rules',
         put({ ...rules, ports: items(ports).map(Number), countries: items(countries), allowedProtocols: items(allowedProtocols).map(Number),
           dnsBlockedDomains: items(dnsBlocked), dnsExcludedDomains: items(dnsExcluded),
-          dnsAllowedTypes: items(dnsTypes).map(Number), dnsConflictingReplies: dnsConflicts }));
+          dnsAllowedTypes: items(dnsTypes).map(Number), dnsConflictingReplies: dnsConflicts, outbound: outboundPayload(outbound) }));
       setSettings(result);
       setRules(result.rules);
+      setOutbound(outboundDraft(result.rules.outbound));
       setDnsBlocked(result.rules.dnsBlockedDomains?.join(', ') ?? '');
       setDnsExcluded(result.rules.dnsExcludedDomains?.join(', ') ?? '');
       setDnsTypes(result.rules.dnsAllowedTypes?.join(', ') ?? '');
@@ -192,6 +196,7 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
             placeholder="Comma-separated, e.g. 1, 28" /></label>
           <label><input type="checkbox" checked={dnsConflicts} onChange={event => setDnsConflicts(event.target.checked)} />
             Flag conflicting DNS replies</label>
+          <OutboundFields draft={outbound} onChange={setOutbound} />
           <button className="capture-button" type="submit" disabled={pending}>Save rules</button>
         </form>}
       </section>
