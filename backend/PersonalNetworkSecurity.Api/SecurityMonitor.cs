@@ -1,6 +1,8 @@
 using PersonalNetworkSecurity.Capture;
 using PersonalNetworkSecurity.GeoIP;
 
+internal sealed record ApplicationRules(bool CertificateAlerts = false, bool ObsoleteTls = false,
+    bool HttpMethods = false, bool MalformedHeaders = false, int[]? DisallowedTcpPorts = null);
 internal sealed record AlertRules(int BandwidthMiB = 50, int Destinations = 50, int SynPackets = 12,
     int RefusedAttempts = 5, int[]? Ports = null, string[]? Countries = null,
     int ScanPorts = 0, int SweepHosts = 0, int StealthProbes = 0, int UnexpectedPackets = 0,
@@ -10,7 +12,7 @@ internal sealed record AlertRules(int BandwidthMiB = 50, int Destinations = 50, 
     int DnsWindowSeconds = 30, int DnsTunnelingNames = 0, int DnsLabelLength = 30,
     int DnsQueries = 0, int DnsNxDomains = 0, bool DnsConflictingReplies = false,
     string[]? DnsBlockedDomains = null, string[]? DnsExcludedDomains = null, int[]? DnsAllowedTypes = null,
-    OutboundRules? Outbound = null, LanRules? Lan = null);
+    OutboundRules? Outbound = null, LanRules? Lan = null, ApplicationRules? Application = null);
 internal sealed record AddressRule(string Ip, string List);
 internal sealed record SecurityAlert(Guid Id, Guid SessionId, DateTimeOffset ObservedAt, string Rule, string Severity,
     string State, string? RemoteIp, string Evidence);
@@ -60,6 +62,20 @@ internal sealed class SecurityMonitor
         if (store is not null) alerts.AddRange(store.Alerts());
     }
 
+    public void ObserveCertificate(DateTimeOffset time, string host, string address, System.Net.Security.SslPolicyErrors errors,
+        string? validity)
+    {
+        if (errors == System.Net.Security.SslPolicyErrors.None && validity is null) return;
+        lock (gate)
+        {
+            if (rules.Application?.CertificateAlerts != true || addresses.GetValueOrDefault(address) == "trusted") return;
+            PruneCooldowns(time);
+            EmitAt(time, Guid.Empty, "tls-certificate-anomaly", "medium", address,
+                $"HTTPS health check for {host} at {address} reported certificate policy status {errors}." +
+                (validity is null ? "" : $" Certificate is {validity}."), host);
+        }
+    }
+
     public void Observe(Guid sessionId, PacketMetadata packet, IReadOnlySet<string>? gateways = null)
     {
         var directional = packet.Direction is TrafficDirection.Inbound or TrafficDirection.Outbound;
@@ -84,14 +100,35 @@ internal sealed class SecurityMonitor
             if (tick > window)
             {
                 ResetWindow(tick);
-                foreach (var entry in cooldowns)
-                    if (entry.Value <= packet.Timestamp) cooldowns.Remove(entry.Key);
+                PruneCooldowns(packet.Timestamp);
             }
             lanDetection?.Observe(packet, gateways, address => addresses.GetValueOrDefault(address) == "trusted",
                 (rule, severity, remote, scope, evidence) => Emit(packet, rule, severity, remote, evidence, scope));
             if (!directional) return;
             addresses.TryGetValue(ip, out var list);
             if (list == "trusted") return;
+            if (packet.Application?.HeaderIssue is { } issue)
+            {
+                if (rules.Application?.MalformedHeaders == true)
+                    Emit(packet, "malformed-network-header", "low", ip,
+                        $"Captured inconsistent IPv4 header fields from {packet.Source} to {packet.Destination}. {issue}.", issue);
+                return;
+            }
+            if (rules.Application is { } application && packet.ProtocolNumber == 6)
+            {
+                if (application.ObsoleteTls && packet.Application?.TlsVersion is >= 0x0300 and <= 0x0302)
+                    Emit(packet, "weak-protocol", "medium", ip,
+                        $"Observed obsolete TLS/SSL version 0x{packet.Application.TlsVersion:X4} selected in a plaintext ServerHello.",
+                        "tls");
+                if (outbound && packet.Tcp is { } header && (header.Flags & 0x17) == 2 &&
+                    packet.DestinationPort is { } port && application.DisallowedTcpPorts?.Contains(port) == true)
+                    Emit(packet, "weak-protocol", "low", ip,
+                        $"Observed an outbound TCP connection attempt to {ip} on disallowed port {port}.", $"port/{port}");
+                if (application.HttpMethods && packet.Application?.HttpMethod is { } method)
+                    Emit(packet, "suspicious-http-method", "low", ip,
+                        $"Observed plaintext HTTP {method} from {packet.Source} to {packet.Destination}. This method can be legitimate.",
+                        method);
+            }
             if (list is "block" or "watch" && CanEmit(list == "block" ? "blocklisted-address" : "watched-address", ip, packet.Timestamp))
                 Emit(packet, list == "block" ? "blocklisted-address" : "watched-address",
                     list == "block" ? "high" : "informational", ip,
@@ -181,6 +218,8 @@ internal sealed class SecurityMonitor
             || updated.DnsNxDomains is < 0 or > CounterLimit || updated.DnsAllowedTypes is { Length: > 128 }
             || updated.DnsAllowedTypes?.Any(type => type is < 1 or > 65535) == true
             || !DnsDetection.ValidDomains(updated.DnsBlockedDomains) || !DnsDetection.ValidDomains(updated.DnsExcludedDomains)
+            || updated.Application?.DisallowedTcpPorts is { Length: > 128 }
+            || updated.Application?.DisallowedTcpPorts?.Any(port => port is < 1 or > 65535) == true
             || updated.Lan is { } lan && !LanDetection.Valid(lan)
             || updated.Outbound is { } outbound && !OutboundDetection.Valid(outbound)
             || updated.Ports is { Length: > 32 } || updated.Ports?.Any(port => port is < 1 or > 65535) == true
@@ -302,15 +341,24 @@ internal sealed class SecurityMonitor
         return counts.Count < CounterLimit ? counts[ip] = 1 : 0;
     }
 
+    private void PruneCooldowns(DateTimeOffset time)
+    {
+        foreach (var entry in cooldowns)
+            if (entry.Value <= time) cooldowns.Remove(entry.Key);
+    }
+
     private bool CanEmit(string rule, string? ip, DateTimeOffset time, string? scope = null) =>
         cooldowns.TryGetValue((rule, ip, scope), out var until) ? time >= until : cooldowns.Count < CounterLimit;
 
-    private void Emit(PacketMetadata packet, string rule, string severity, string? ip, string evidence, string? scope = null)
+    private void Emit(PacketMetadata packet, string rule, string severity, string? ip, string evidence, string? scope = null) =>
+        EmitAt(packet.Timestamp, session, rule, severity, ip, evidence, scope);
+
+    private void EmitAt(DateTimeOffset time, Guid sessionId, string rule, string severity, string? ip, string evidence, string? scope)
     {
-        if (!CanEmit(rule, ip, packet.Timestamp, scope)) return;
-        cooldowns[(rule, ip, scope)] = packet.Timestamp.AddSeconds(CooldownSeconds);
+        if (!CanEmit(rule, ip, time, scope)) return;
+        cooldowns[(rule, ip, scope)] = time.AddSeconds(CooldownSeconds);
         if (alerts.Count == AlertLimit) alerts.RemoveAt(AlertLimit - 1);
-        alerts.Insert(0, new(Guid.NewGuid(), session, packet.Timestamp, rule, severity, "open", ip, evidence));
+        alerts.Insert(0, new(Guid.NewGuid(), sessionId, time, rule, severity, "open", ip, evidence));
         revision++;
     }
 }

@@ -12,7 +12,8 @@ public sealed record PacketMetadata(
     PacketOwner? Owner = null, long Sequence = 0, TcpEvidence? Tcp = null, bool IsEchoRequest = false,
     [property: System.Text.Json.Serialization.JsonIgnore] DnsEvidence? Dns = null,
     [property: System.Text.Json.Serialization.JsonIgnore] ArpClaim? Arp = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] DhcpClaim? Dhcp = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] DhcpClaim? Dhcp = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] ApplicationEvidence? Application = null);
 
 public static class PacketMetadataParser
 {
@@ -29,6 +30,10 @@ public static class PacketMetadataParser
             if (link == LinkLayers.Ethernet && LanMetadataParser.ArpReply(data) is { } arp)
                 return new(timestamp, arp.Address, arp.Target, null, null, "ARP", -1, length,
                     TrafficDirection.Unknown, Arp: arp);
+
+            if ((link is LinkLayers.Ethernet or LinkLayers.Raw or LinkLayers.RawLegacy) &&
+                ApplicationMetadataParser.InvalidIpv4(data, link == LinkLayers.Ethernet, timestamp, length, localAddresses) is { } malformed)
+                return malformed;
 
             var ip = Packet.ParsePacket(link, data).Extract<IPPacket>();
             if (ip is null) return null;
@@ -59,7 +64,10 @@ public static class PacketMetadataParser
                     ? DnsMetadataParser.Parse(payload.AsSpan(0, dns.Length - 8)) : null,
                 Dhcp: protocol == 17 && ip is IPv4Packet && transport is UdpPacket { SourcePort: 67, DestinationPort: 68 } dhcp
                     && dhcp.Length >= 8 && (dhcp.PayloadPacket?.Bytes ?? dhcp.PayloadData) is { } bootp && bootp.Length >= dhcp.Length - 8
-                    ? LanMetadataParser.DhcpReply(bootp.AsSpan(0, dhcp.Length - 8)) : null);
+                    ? LanMetadataParser.DhcpReply(bootp.AsSpan(0, dhcp.Length - 8)) : null,
+                Application: transport is TcpPacket app && (app.Flags & 0x06) == 0 &&
+                    (app.PayloadPacket?.Bytes ?? app.PayloadData) is { Length: > 0 } application
+                    ? ApplicationMetadataParser.Tcp(application) : null);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or InvalidOperationException
             or NotImplementedException or NotSupportedException or System.IO.IOException)

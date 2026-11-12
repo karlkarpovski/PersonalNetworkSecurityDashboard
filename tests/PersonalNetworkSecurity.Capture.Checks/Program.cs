@@ -84,6 +84,7 @@ FloodChecks.Run(sent);
 DnsChecks.Run();
 OutboundChecks.Run(sent);
 LanChecks.Run(sent);
+ApplicationChecks.Run();
 StorageChecks.Run(sent);
 if (Environment.GetEnvironmentVariable("PNS_MEASURE_ARCHIVE") == "1") StorageChecks.MeasureArchive(sent);
 if (Environment.GetEnvironmentVariable("PNS_TEST_DESKTOP_HOST") == "1") await DesktopChecks.RunAsync();

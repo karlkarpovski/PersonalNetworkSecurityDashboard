@@ -21,6 +21,10 @@ export type LanRules = {
   arpChanges: boolean; gatewayChanges: boolean; trustedGatewayMacs: string[] | null;
   trustedDhcpServers: string[] | null; lateralThreshold: number; windowSeconds: number; sensitivePorts: number[] | null;
 };
+export type ApplicationRules = {
+  certificateAlerts: boolean; obsoleteTls: boolean; httpMethods: boolean; malformedHeaders: boolean;
+  disallowedTcpPorts: number[] | null;
+};
 export type AlertRules = {
   bandwidthMiB: number; destinations: number; synPackets: number; refusedAttempts: number;
   scanPorts: number; sweepHosts: number; stealthProbes: number; unexpectedPackets: number;
@@ -29,6 +33,7 @@ export type AlertRules = {
   dnsWindowSeconds: number; dnsTunnelingNames: number; dnsLabelLength: number;
   dnsQueries: number; dnsNxDomains: number; dnsConflictingReplies: boolean;
   dnsBlockedDomains: string[] | null; dnsExcludedDomains: string[] | null; dnsAllowedTypes: number[] | null;
+  application?: ApplicationRules | null;
   lan?: LanRules | null;
   outbound?: OutboundRules | null;
   reconWindowSeconds: number; allowedProtocols: number[] | null;
@@ -40,6 +45,8 @@ export const ruleNames: Record<string, string> = {
   'blocklisted-address': 'Blocklisted address', 'watched-address': 'Watched address',
   'bandwidth-threshold': 'Bandwidth threshold', 'destination-threshold': 'Distinct destination threshold',
   'monitored-port': 'Monitored port', 'monitored-country': 'Monitored country',
+  'tls-certificate-anomaly': 'TLS certificate validation anomaly', 'weak-protocol': 'Weak or disallowed protocol',
+  'suspicious-http-method': 'Unusual plaintext HTTP method', 'malformed-network-header': 'Inconsistent network header',
   'possible-arp-spoofing': 'Conflicting ARP replies', 'gateway-mac-change': 'Unexpected gateway MAC',
   'unexpected-dhcp-server': 'Unexpected DHCP server', 'possible-lateral-movement': 'Unusual internal TCP access',
   'possible-beaconing': 'Possible periodic beaconing', 'potential-data-exfiltration': 'Unusual outbound transfer',

@@ -11,7 +11,7 @@ internal sealed record NetworkChangeEntry(DateTimeOffset At, string Adapter, str
 internal sealed record NeighborDevice(string Mac, string Ip, DateTimeOffset FirstSeen, DateTimeOffset LastSeen, string? Name);
 internal sealed record DeviceName(string? Mac, string? Name);
 
-internal sealed partial class NetworkTools(LocalStore store) : BackgroundService
+internal sealed partial class NetworkTools(LocalStore store, SecurityMonitor security) : BackgroundService
 {
     private const int DeviceLimit = 256;
     private readonly object gate = new();
@@ -107,7 +107,7 @@ internal sealed partial class NetworkTools(LocalStore store) : BackgroundService
         return new(name, $"{replies.Count}/3 ICMP replies", replies.Count == 0 ? null : replies.Average(), replies.Count);
     }
 
-    private static async Task<HealthCheck> TlsAsync(string host, IPAddress address, CancellationToken token)
+    private async Task<HealthCheck> TlsAsync(string host, IPAddress address, CancellationToken token)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(4));
@@ -116,7 +116,16 @@ internal sealed partial class NetworkTools(LocalStore store) : BackgroundService
         try
         {
             await client.ConnectAsync(address, 443, deadline.Token);
-            using var stream = new SslStream(client.GetStream());
+            using var stream = new SslStream(client.GetStream(), leaveInnerStreamOpen: false,
+                (_, certificate, _, errors) =>
+                {
+                    var time = DateTimeOffset.UtcNow;
+                    var leaf = certificate as System.Security.Cryptography.X509Certificates.X509Certificate2;
+                    var validity = leaf is null ? null : time.UtcDateTime > leaf.NotAfter.ToUniversalTime() ? "expired"
+                        : time.UtcDateTime < leaf.NotBefore.ToUniversalTime() ? "not yet valid" : null;
+                    security.ObserveCertificate(time, host, address.ToString(), errors, validity);
+                    return errors == SslPolicyErrors.None;
+                });
             await stream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = host }, deadline.Token);
             return new("HTTPS connection", "TCP and TLS completed", timer.Elapsed.TotalMilliseconds);
         }

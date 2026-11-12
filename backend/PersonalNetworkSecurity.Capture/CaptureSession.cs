@@ -40,7 +40,7 @@ public sealed class CaptureSession(ILiveDevice device, HashSet<IPAddress> addres
             await foreach (var packet in queue.Reader.ReadAllAsync())
             {
                 var attributed = packet with { Owner = Volatile.Read(ref socketOwners)?.Match(packet) };
-                if (attributed.Arp is null) Traffic.Add(attributed);
+                if (attributed.Arp is null && attributed.Application?.HeaderIssue is null) Traffic.Add(attributed);
                 observe(Id, attributed);
             }
         });
