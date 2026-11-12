@@ -77,7 +77,13 @@ internal sealed class CaptureMonitor(ILogger<CaptureMonitor> logger, CapturePort
             var adapter = FindInterface(interfaces, InterfaceId(device.Name));
             if (adapter is not null && adapter.OperationalStatus != OperationalStatus.Up)
                 return (409, "That adapter is down. Connect it before starting capture.");
-            candidate = new CaptureSession(device, LocalAddresses(interfaces), ports.Api, ports.Ui, security.Observe);
+            var gateways = adapter?.GetIPProperties().GatewayAddresses
+                .Select(gateway => gateway.Address)
+                .Where(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                    !address.Equals(IPAddress.Any))
+                .Select(address => address.ToString()).ToHashSet(StringComparer.Ordinal);
+            candidate = new CaptureSession(device, LocalAddresses(interfaces), ports.Api, ports.Ui,
+                (session, packet) => security.Observe(session, packet, gateways));
             candidate.Start();
             current = candidate;
             previous = null;

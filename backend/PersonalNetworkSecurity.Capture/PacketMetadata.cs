@@ -10,7 +10,9 @@ public sealed record PacketMetadata(
     DateTimeOffset Timestamp, string Source, string Destination, ushort? SourcePort,
     ushort? DestinationPort, string Protocol, int ProtocolNumber, uint Length, TrafficDirection Direction,
     PacketOwner? Owner = null, long Sequence = 0, TcpEvidence? Tcp = null, bool IsEchoRequest = false,
-    [property: System.Text.Json.Serialization.JsonIgnore] DnsEvidence? Dns = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] DnsEvidence? Dns = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] ArpClaim? Arp = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] DhcpClaim? Dhcp = null);
 
 public static class PacketMetadataParser
 {
@@ -24,6 +26,10 @@ public static class PacketMetadataParser
 
         try
         {
+            if (link == LinkLayers.Ethernet && LanMetadataParser.ArpReply(data) is { } arp)
+                return new(timestamp, arp.Address, arp.Target, null, null, "ARP", -1, length,
+                    TrafficDirection.Unknown, Arp: arp);
+
             var ip = Packet.ParsePacket(link, data).Extract<IPPacket>();
             if (ip is null) return null;
             var source = Normalize(ip.SourceAddress);
@@ -50,7 +56,10 @@ public static class PacketMetadataParser
                     && icmp[0] == (protocol == 1 ? 8 : 128) && icmp[1] == 0,
                 Dns: transport is UdpPacket dns && (dns.SourcePort == 53 || dns.DestinationPort == 53)
                     && dns.Length >= 8 && dns.PayloadData is { } payload && payload.Length >= dns.Length - 8
-                    ? DnsMetadataParser.Parse(payload.AsSpan(0, dns.Length - 8)) : null);
+                    ? DnsMetadataParser.Parse(payload.AsSpan(0, dns.Length - 8)) : null,
+                Dhcp: protocol == 17 && ip is IPv4Packet && transport is UdpPacket { SourcePort: 67, DestinationPort: 68 } dhcp
+                    && dhcp.Length >= 8 && (dhcp.PayloadPacket?.Bytes ?? dhcp.PayloadData) is { } bootp && bootp.Length >= dhcp.Length - 8
+                    ? LanMetadataParser.DhcpReply(bootp.AsSpan(0, dhcp.Length - 8)) : null);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or InvalidOperationException
             or NotImplementedException or NotSupportedException or System.IO.IOException)

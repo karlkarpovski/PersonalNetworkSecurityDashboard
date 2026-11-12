@@ -40,7 +40,7 @@ export function outboundPayload(draft: OutboundDraft) {
 }
 
 export function OutboundFields({ draft, onChange }: { draft: OutboundDraft; onChange: (next: OutboundDraft) => void }) {
-  return <fieldset className="security-form outbound-fields">
+  return <fieldset className="security-form security-rule-group">
     <legend>Outbound traffic and threat intelligence</legend>
     <p>Use 0 to disable interval and transfer alerts. Paste comma-separated values from a trusted indicator snapshot.
       Snapshots expire after the configured age. A blank expected port list disables service alerts.</p>
