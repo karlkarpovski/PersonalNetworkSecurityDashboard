@@ -1,5 +1,9 @@
 # Personal Network Security
 
+[Download the Windows beta](https://github.com/karlkarpovski/PersonalNetworkSecurityDashboard/releases/tag/v0.1.0-beta.1)
+
+The release page includes the installer, portable ZIP, checksums, and known limitations. Choose the Setup executable for guided installation. Downloads are published as release assets; build outputs remain excluded from the source repository.
+
 ## Windows installer
 
 Run `PersonalNetworkSecurity-Setup-win-x64.exe` for guided installation, shortcuts, updates, and uninstall support. Setup includes .NET and installs WebView2 when needed. It links to the official Npcap installer when the capture driver is missing. See [Windows setup guide](desktop/Windows-Setup.md).
