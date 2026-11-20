@@ -1,5 +1,11 @@
 # Personal Network Security
 
+## Windows installer
+
+Run `PersonalNetworkSecurity-Setup-win-x64.exe` for guided installation, shortcuts, updates, and uninstall support. Setup includes .NET and installs WebView2 when needed. It links to the official Npcap installer when the capture driver is missing. See [Windows setup guide](desktop/Windows-Setup.md).
+
+To build Setup, install Inno Setup 6.3 or newer and run `./desktop/Build-WindowsInstaller.ps1` with the normal build prerequisites. The build verifies the Microsoft bootstrapper signature before bundling it.
+
 ## Windows desktop package
 
 Build the self-contained Windows x64 ZIP from PowerShell on Windows with the .NET 10 SDK and Node 24 installed.
