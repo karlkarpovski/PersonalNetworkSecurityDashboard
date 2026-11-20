@@ -92,7 +92,7 @@ export function App() {
       }}>Skip to workspace</a>
       <header className="topbar soft-panel">
         <a className="brand" href="#overview">
-          <img className="brand-logo" src={`${import.meta.env.BASE_URL}pnsd-logo.svg`} width={44} height={44} alt="" />
+          <img className="brand-logo" src={`${import.meta.env.BASE_URL}pnsd-logo.png`} width={44} height={44} alt="" />
           Personal Network Security
         </a>
         <div className="service-controls">

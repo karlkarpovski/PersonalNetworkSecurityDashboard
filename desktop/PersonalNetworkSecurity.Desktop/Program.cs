@@ -1,6 +1,5 @@
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
@@ -20,11 +19,8 @@ internal static class Program
     private static async Task OpenAsync(Application application, bool verify)
     {
         var exitCode = 0;
-        Window? splash = null;
         try
         {
-            splash = CreateSplash();
-            splash.Show();
             var profile = Environment.GetEnvironmentVariable("PNS_WEBVIEW_DATA_DIR") ??
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "PersonalNetworkSecurity", "WebView2");
@@ -117,8 +113,6 @@ internal static class Program
                 if (navigation == loaded.Task && !await loaded.Task)
                     throw new InvalidOperationException("The local dashboard could not load.");
                 await WaitForDashboardAsync(core, closed.Task);
-                splash.Close();
-                splash = null;
                 window.Activate();
                 view.Focus();
                 if (verify)
@@ -137,8 +131,6 @@ internal static class Program
         catch (OperationCanceledException) when (!verify) { }
         catch (Exception error)
         {
-            splash?.Close();
-            splash = null;
             exitCode = 1;
             if (verify)
                 Console.Error.WriteLine(error);
@@ -147,49 +139,11 @@ internal static class Program
                     ? "Install the Microsoft Edge WebView2 Evergreen Runtime and try again."
                     : error.Message, "Personal Network Security", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { splash?.Close(); }
         application.Shutdown(exitCode);
     }
 
     private static BitmapImage LoadArtwork(string name) =>
         new(new Uri($"pack://application:,,,/Assets/{name}", UriKind.Absolute));
-
-    private static Window CreateSplash()
-    {
-        var content = new StackPanel
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        content.Children.Add(new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(129, 146, 170)),
-            CornerRadius = new CornerRadius(22),
-            Child = new Image { Source = LoadArtwork("Logo.png"), Width = 280, Height = 280 },
-        });
-        content.Children.Add(new TextBlock
-        {
-            Text = "Starting Personal Network Security…",
-            Foreground = Brushes.White,
-            FontSize = 16,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(12, 16, 12, 0),
-        });
-        return new Window
-        {
-            Title = "Starting Personal Network Security",
-            Width = 390,
-            Height = 380,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            WindowStyle = WindowStyle.None,
-            ResizeMode = ResizeMode.NoResize,
-            ShowInTaskbar = false,
-            ShowActivated = false,
-            Topmost = true,
-            Background = new SolidColorBrush(Color.FromRgb(13, 23, 39)),
-            Content = content,
-        };
-    }
 
     private static async Task WaitForDashboardAsync(CoreWebView2 view, Task closed)
     {
