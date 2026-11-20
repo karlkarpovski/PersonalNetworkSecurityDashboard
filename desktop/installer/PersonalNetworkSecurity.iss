@@ -27,6 +27,9 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 DisableProgramGroupPage=yes
+[Messages]
+FinishedLabel=Setup has installed [name]. Launch the app and follow the getting-started guide on Overview. GeoIP databases are optional; Settings contains instructions for adding locations and network ownership.
+
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]

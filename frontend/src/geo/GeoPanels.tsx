@@ -3,6 +3,7 @@ import { captureRequest, formatBytes } from '../capture/captureApi';
 import type { Flow } from '../capture/captureApi';
 import type { GeoResult, GeoSettings } from './geoTypes';
 import './geo.css';
+import { GeoSetupGuide } from './GeoSetupGuide';
 
 export function locationStatus(result: GeoResult) {
   switch (result.status) {
@@ -87,6 +88,7 @@ export function GeoSettingsPanel({ code }: { code: string }) {
         <h2 id="geo-settings-title">Offline GeoIP</h2>
         <button type="button" className="capture-button" disabled={pending} onClick={() => void update('reload')}>Reload databases</button>
       </div>
+      <GeoSetupGuide settings={settings} />
       <p>Put your GeoLite2 City and ASN MMDB files in the database directory. Lookups use only local files.</p>
       {settings && <>
         <p>Database directory <code className="geo-path">{settings.databases.directory}</code></p>
@@ -154,6 +156,7 @@ export function IpIntelligence({ code, flows = [] }: { code: string; flows?: Flo
   return (
     <section className="soft-panel capture-panel" aria-labelledby="geo-lookup-title">
       <h2 id="geo-lookup-title">Offline address lookup</h2>
+      <p>Location and network ownership require optional local databases. <a href="#settings?setup=geo">View GeoIP setup instructions</a>.</p>
       <form className="capture-controls" onSubmit={event => { event.preventDefault(); void lookup(); }}>
         <label>IP address<input required maxLength={80} value={ip} onChange={event => setIp(event.target.value)} placeholder="IPv4 or IPv6" /></label>
         <button type="submit" className="capture-button" disabled={pending}>Look up address</button>

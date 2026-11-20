@@ -96,7 +96,27 @@ internal static class Program
                 core.Settings.IsWebMessageEnabled = false;
                 core.NavigationStarting += (_, eventArgs) => eventArgs.Cancel = !IsDashboard(eventArgs.Uri, host.Origin);
                 core.FrameNavigationStarting += (_, eventArgs) => eventArgs.Cancel = true;
-                core.NewWindowRequested += (_, eventArgs) => eventArgs.Handled = true;
+                core.NewWindowRequested += (_, eventArgs) =>
+                {
+                    eventArgs.Handled = true;
+                    if (eventArgs.IsUserInitiated &&
+                        Uri.TryCreate(eventArgs.Uri, UriKind.Absolute, out var external) &&
+                        external.Scheme == "https" && external.Host == "dev.maxmind.com" &&
+                        external.AbsolutePath == "/geoip/geolite2-free-geolocation-data/" &&
+                        string.IsNullOrEmpty(external.UserInfo) && external.IsDefaultPort)
+                    {
+                        try
+                        {
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                                external.AbsoluteUri) { UseShellExecute = true });
+                        }
+                        catch (System.ComponentModel.Win32Exception)
+                        {
+                            MessageBox.Show(window, "Open https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/ in your browser.",
+                                "GeoIP setup", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                    }
+                };
                 core.PermissionRequested += (_, eventArgs) => eventArgs.State = CoreWebView2PermissionState.Deny;
                 var loaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 core.NavigationCompleted += (_, eventArgs) => loaded.TrySetResult(eventArgs.IsSuccess);

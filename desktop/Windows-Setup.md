@@ -12,6 +12,14 @@ Run a newer Setup to update the installed app. Use Windows Installed apps to uni
 
 The generated setup executable is unsigned until a release signing certificate is configured. Windows may show an unknown-publisher warning. Verify the download source and the published SHA-256 before running it.
 
+## Guided first use and optional GeoIP
+
+After launch, Overview offers a getting-started guide when either GeoIP database is unavailable. Start capture and inspect applications, connections, traffic charts, or history immediately. Select **Guide me through GeoIP setup** to open Settings.
+
+Under **Settings → Offline GeoIP**, follow the numbered instructions to obtain MMDB files from your own MaxMind account, extract them, and copy them into the displayed directory. **Copy database directory** helps locate that folder in File Explorer. Select **Reload databases** and confirm each file is ready. Save an approximate origin to enable mapped routes for endpoints with coordinates.
+
+The City file enables approximate location and country information. The ASN file enables network ownership information. MaxMind credentials and license keys are not requested by the dashboard. The guide remains available in Settings after you hide the Overview reminder.
+
 ## Portable ZIP
 
 Extract the complete ZIP to a folder you can write to, then run **PersonalNetworkSecurity.exe**. Close the window to stop capture and save the final checkpoint.

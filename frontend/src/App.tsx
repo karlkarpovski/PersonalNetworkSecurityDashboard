@@ -11,6 +11,7 @@ import { ApplicationsPanel } from './capture/ApplicationsPanel';
 import { HistoryWorkspace, StorageSettingsPanel } from './capture/StoragePanels';
 import { TrafficAnalytics } from './capture/TrafficAnalytics';
 import { CaptureStatus, DiagnosticsPanel, InvestigationPanel } from './WorkspacePanels';
+import { GettingStarted } from './geo/GeoSetupGuide';
 import { SecurityPanel } from './security/SecurityPanel';
 
 const GlobePage = lazy(() => import('./globe/GlobePage'));
@@ -121,7 +122,7 @@ export function App() {
         <div className="page-content">
           {capture.status === 'locked' &&
             <CaptureAccessForm rejected={capture.rejected} unlock={capture.unlock} />}
-          {page.id === 'overview' && <><InvestigationPanel view={capture.view} /><Dashboard capture={capture.view} geo={capture.geo} security={capture.security}
+          {page.id === 'overview' && <>{capture.code && <GettingStarted code={capture.code} />}<InvestigationPanel view={capture.view} /><Dashboard capture={capture.view} geo={capture.geo} security={capture.security}
             samples={capture.samples} streamLabel={liveStatus} /></>}
           {page.id === 'packets' && <>{captureControls}<PacketPanel key={route} view={capture.view} /></>}
           {page.id === 'connections' && <FlowPanel key={route} view={capture.view} geo={capture.geo} />}

@@ -8,3 +8,8 @@
 .geo-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: .45rem .65rem; font-size: .83rem; }
 .geo-details dt { color: var(--muted); }
 .geo-details dd { margin: 0; overflow-wrap: anywhere; }
+
+.geo-setup-guide { padding: 1rem; border-radius: .8rem; margin-block: .8rem; }
+.setup-steps { padding-inline-start: 1.35rem; line-height: 1.6; }
+.setup-steps > li { margin-block: .7rem; overflow-wrap: anywhere; }
+.geo-setup-guide code { overflow-wrap: anywhere; }
