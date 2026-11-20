@@ -6,12 +6,16 @@ internal sealed class DnsDetection
     private readonly Dictionary<(FlowKey Flow, ushort Id, string Name, ushort Type), int?> transactions = new();
     private readonly Dictionary<string, (int Queries, int NxDomains)> counts = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Resolver, string Suffix), HashSet<string>> labels = new();
+    private readonly Queue<(FlowKey Flow, ushort Id, string Name, ushort Type)> transactionOrder = new();
+    private bool capacityReported;
     private int labelCount;
     private long window = long.MinValue;
 
     public void Reset()
     {
         transactions.Clear();
+        transactionOrder.Clear();
+        capacityReported = false;
         counts.Clear();
         labels.Clear();
         labelCount = 0;
@@ -42,7 +46,19 @@ internal sealed class DnsDetection
         if (query)
         {
             if (correlated) return;
-            if (transactions.Count < Capacity) transactions.Add(key, null);
+            if (transactions.Count == Capacity)
+            {
+                transactions.Remove(transactionOrder.Dequeue());
+                if (!capacityReported)
+                {
+                    capacityReported = true;
+                    emit("dns-query-anomaly", "informational", "capacity",
+                        $"DNS correlation reached its {Capacity} transaction limit in a {rules.DnsWindowSeconds}-second window. " +
+                        "Recent queries replace older entries. Query-rate counting is capped for this window to avoid counting evicted retries again.");
+                }
+            }
+            transactions.Add(key, null);
+            transactionOrder.Enqueue(key);
 
             if (Matches(message.Name, rules.DnsBlockedDomains))
                 emit("dns-blocked-domain", "medium", message.Name, $"Outbound DNS lookup matched the local denylist. {Context()}");
@@ -87,7 +103,7 @@ internal sealed class DnsDetection
         if (!counts.TryGetValue(resolver, out var count) && counts.Count >= Capacity) return;
         if (query)
         {
-            if (rules.DnsQueries == 0) return;
+            if (rules.DnsQueries == 0 || capacityReported) return;
             count.Queries++;
             if (count.Queries == rules.DnsQueries)
                 emit("dns-query-anomaly", "low", "queries",

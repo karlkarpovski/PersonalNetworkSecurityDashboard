@@ -83,6 +83,25 @@ internal static class DnsChecks
             Require(Count("dns-query-anomaly") == 3, "count only distinct correlated NXDOMAIN replies");
             Reply(8, "one.test", 0, 10);
             Require(Count("dns-conflicting-replies") == 1, "expire correlation across windows");
+            var bounded = new DnsDetection();
+            var capacityAlerts = new List<string>();
+            var capacityRules = new AlertRules(DnsWindowSeconds: 10, DnsQueries: 5000, DnsNxDomains: 1);
+            void Record(string rule, string severity, string? scope, string evidence) => capacityAlerts.Add(scope ?? rule);
+            for (var index = 0; index < 4200; index++)
+            {
+                var question = new DnsEvidence((ushort)index, false, 0, $"q{index}.test", 1);
+                bounded.Observe(wire! with { Timestamp = time }, question, capacityRules, Record);
+            }
+            bounded.Observe(wire! with { Timestamp = time, Source = wire!.Destination, Destination = wire.Source,
+                SourcePort = 53, DestinationPort = 49152, Direction = TrafficDirection.Inbound },
+                new(4199, true, 3, "q4199.test", 1), capacityRules, Record);
+            Require(capacityAlerts.Count(scope => scope == "capacity") == 1 && capacityAlerts.Contains("nxdomain") &&
+                !capacityAlerts.Contains("queries"), "bounded correlation continues and rate counting reports saturation");
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var loadQuery = new DnsEvidence(4201, false, 0, "load.test", 1);
+            for (var index = 0; index < 100000; index++)
+                bounded.Observe(wire! with { Timestamp = time }, loadQuery with { Transaction = (ushort)index }, capacityRules, Record);
+            Console.WriteLine($"100,000 DNS observations at bounded capacity took {timer.Elapsed.TotalMilliseconds:N0} ms.");
             monitor.Flush();
             Require(new SecurityMonitor(geography, store).History().Any(alert => alert.Rule == "dns-tunneling"),
                 "persist DNS alert history");

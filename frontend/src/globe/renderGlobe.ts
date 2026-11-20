@@ -4,8 +4,8 @@ import {
   SRGBColorSpace, Texture, TextureLoader, TubeGeometry, Vector2, Vector3, WebGLRenderer, Curve, MathUtils,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { directionColors } from './demoRoutes';
-import type { Location, VisibleFlow } from './demoRoutes';
+import { directionColors } from './routeTypes';
+import type { Location, VisibleFlow } from './routeTypes';
 
 const radius = 1;
 const up = new Vector3(0, 1, 0);

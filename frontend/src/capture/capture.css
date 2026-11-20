@@ -29,3 +29,9 @@
 .capture-table tbody tr + tr { border-top: 1px solid var(--edge); }
 .capture-direction { text-transform: capitalize; }
 .history-pagination { margin-top: .8rem; align-items: center; color: var(--muted); font-size: .85rem; }
+.live-table-pages { overflow-anchor: none; }
+.live-table-pages .capture-table th,
+.live-table-pages .capture-table td { height: 2.4rem; padding-block: .35rem; }
+.live-table-pages.multiple-pages .capture-table-wrap { min-block-size: 26.55rem; }
+.live-table-pagination { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .7rem; margin-top: .75rem; color: var(--muted); font-size: .85rem; }
+.live-table-pagination [aria-disabled="true"] { cursor: default; opacity: .6; box-shadow: var(--inset); }

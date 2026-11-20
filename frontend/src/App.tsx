@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Activity, Boxes, Cable, ChartNoAxesColumn, Globe2, History, LayoutDashboard,
-  RefreshCw, Search, Settings, Shield, ShieldAlert, Wrench,
+  RefreshCw, Search, Settings, ShieldAlert, Wrench,
 } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import { CaptureAccessForm, CaptureControls, FlowPanel, PacketPanel } from './capture/CapturePages';
@@ -10,6 +10,7 @@ import { GeoSettingsPanel, IpIntelligence } from './geo/GeoPanels';
 import { ApplicationsPanel } from './capture/ApplicationsPanel';
 import { HistoryWorkspace, StorageSettingsPanel } from './capture/StoragePanels';
 import { TrafficAnalytics } from './capture/TrafficAnalytics';
+import { CaptureStatus, DiagnosticsPanel, InvestigationPanel } from './WorkspacePanels';
 import { SecurityPanel } from './security/SecurityPanel';
 
 const GlobePage = lazy(() => import('./globe/GlobePage'));
@@ -32,10 +33,11 @@ const pages = [
 type Health = 'checking' | 'ready' | 'offline';
 
 function currentPage() {
-  return pages.find(page => `#${page.id}` === window.location.hash) ?? pages[0];
+  return pages.find(page => `#${page.id}` === window.location.hash.split('?')[0]) ?? pages[0];
 }
 
 export function App() {
+  const [route, setRoute] = useState(window.location.hash);
   const [page, setPage] = useState(currentPage);
   const [health, setHealth] = useState<Health>('checking');
   const [attempt, setAttempt] = useState(0);
@@ -48,7 +50,7 @@ export function App() {
     view={capture.view} offline={capture.status !== 'connected'} />;
 
   useEffect(() => {
-    const onHashChange = () => setPage(currentPage());
+    const onHashChange = () => { setPage(currentPage()); setRoute(window.location.hash); };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
@@ -90,7 +92,7 @@ export function App() {
       }}>Skip to workspace</a>
       <header className="topbar soft-panel">
         <a className="brand" href="#overview">
-          <span className="monogram"><Shield size={21} aria-hidden="true" /></span>
+          <img className="brand-logo" src={`${import.meta.env.BASE_URL}pnsd-logo.svg`} width={44} height={44} alt="" />
           Personal Network Security
         </a>
         <div className="service-controls">
@@ -115,18 +117,19 @@ export function App() {
         <h1>{page.title}</h1>
         <p className="description">{page.detail}</p>
         {health === 'offline' && <p className="offline-message">Start the local API, then use Check connection to retry.</p>}
+        <CaptureStatus view={capture.view} connected={capture.status === 'connected'} />
         <div className="page-content">
           {capture.status === 'locked' &&
             <CaptureAccessForm rejected={capture.rejected} unlock={capture.unlock} />}
-          {page.id === 'overview' && <Dashboard capture={capture.view} geo={capture.geo} security={capture.security}
-            samples={capture.samples} streamLabel={liveStatus} />}
-          {page.id === 'packets' && <>{captureControls}<PacketPanel view={capture.view} /></>}
-          {page.id === 'connections' && <FlowPanel view={capture.view} geo={capture.geo} />}
-          {page.id === 'applications' && <ApplicationsPanel view={capture.view} />}
+          {page.id === 'overview' && <><InvestigationPanel view={capture.view} /><Dashboard capture={capture.view} geo={capture.geo} security={capture.security}
+            samples={capture.samples} streamLabel={liveStatus} /></>}
+          {page.id === 'packets' && <>{captureControls}<PacketPanel key={route} view={capture.view} /></>}
+          {page.id === 'connections' && <FlowPanel key={route} view={capture.view} geo={capture.geo} />}
+          {page.id === 'applications' && <ApplicationsPanel key={route} view={capture.view} />}
           {page.id === 'history' && capture.code && <HistoryWorkspace
             code={capture.code} currentSession={capture.view?.sessionId ?? null} />}
           {page.id === 'settings' && <>{captureControls}{capture.code && <>
-            <StorageSettingsPanel code={capture.code} /><GeoSettingsPanel code={capture.code} />
+            <DiagnosticsPanel code={capture.code} /><StorageSettingsPanel code={capture.code} /><GeoSettingsPanel code={capture.code} />
           </>}</>}
           {page.id === 'intelligence' && capture.code && <IpIntelligence code={capture.code} flows={capture.view?.traffic?.recentFlows} />}
           {page.id === 'analytics' && <TrafficAnalytics view={capture.view} geo={capture.geo} samples={capture.samples} />}

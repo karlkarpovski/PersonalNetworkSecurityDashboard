@@ -1,22 +1,12 @@
 .globe-panel { padding: clamp(.85rem, 2vw, 1.35rem); }
 .globe-heading { flex-wrap: wrap; }
-.globe-button, .endpoint-button, .globe-filters select, .globe-filters input, .globe-controls select {
+.endpoint-button, .globe-filters select, .globe-filters input, .globe-controls select {
   font: inherit;
   color: inherit;
   border: 1px solid var(--edge);
   border-radius: .6rem;
 }
-.globe-button {
-  padding: .52rem .72rem;
-  background: var(--panel);
-  box-shadow: var(--raised-small);
-  cursor: pointer;
-}
-.globe-button span { margin-left: .4rem; color: var(--muted); }
-.globe-button[aria-pressed="true"] { box-shadow: var(--inset); background: var(--surface); }
-.globe-button[aria-pressed="true"] span, .simulation { color: var(--amber); }
 .globe-mode, .globe-note, .globe-inspector > p { margin: .55rem 0; color: var(--muted); font-size: .85rem; }
-.globe-mode.simulation { color: var(--amber); }
 .globe-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));

@@ -1,3 +1,4 @@
+import { LiveTablePages } from './LiveTablePages';
 import { useEffect, useState } from 'react';
 import { captureRequest, formatBytes } from './captureApi';
 import type { Adapter, AdapterResult, CaptureView, Packet } from './captureApi';
@@ -120,7 +121,7 @@ export function CaptureControls({ view, offline, code }: {
 }
 
 export function PacketPanel({ view }: { view?: CaptureView }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.hash.split('?')[1]).get('q') ?? '');
   const query = search.trim().toLowerCase();
   const packets = view?.traffic?.recentPackets ?? [];
   const matching = packets.filter(packet =>
@@ -135,9 +136,10 @@ export function PacketPanel({ view }: { view?: CaptureView }) {
       {view?.traffic && (
         <p>Queue drops {view.queueDrops.toLocaleString()} · Driver drops {view.driverDrops?.toLocaleString() ?? 'unavailable'} · Skipped frames {view.skippedFrames.toLocaleString()} · Local {view.traffic.localPackets.toLocaleString()} · Unknown {view.traffic.unknownPackets.toLocaleString()}</p>
       )}
-      {matching.length === 0 ? <p>{packets.length ? 'No packets match this filter.' : 'Waiting for captured IP metadata.'}</p> : (
-        <PacketTable packets={matching} />
-      )}
+      <LiveTablePages key={JSON.stringify([view?.sessionId, query])} rows={matching} label="Packet pages"
+        empty={packets.length ? 'No packets match this filter.' : 'Waiting for captured IP metadata.'}>
+        {page => <PacketTable packets={page} />}
+      </LiveTablePages>
     </section>
   );
 }
@@ -162,7 +164,7 @@ export function PacketTable({ packets }: { packets: Packet[] }) {
 }
 
 export function FlowPanel({ view, geo }: { view?: CaptureView; geo?: GeoSnapshot }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.hash.split('?')[1]).get('q') ?? '');
   const [sort, setSort] = useState('recent');
   const flows = view?.traffic?.recentFlows ?? [];
   const query = search.trim().toLowerCase();
@@ -181,13 +183,14 @@ export function FlowPanel({ view, geo }: { view?: CaptureView; geo?: GeoSnapshot
       </div>
       <p>Showing up to 50 recent flows. Owner labels describe sampled Windows socket matches. Flow totals include unattributed packets.</p>
       {misses > 0 && <p className="capture-warning">{misses.toLocaleString()} packets could not be grouped because the flow table reached capacity.</p>}
-      {matching.length === 0 ? <p>{flows.length ? 'No flows match this filter.' : 'Waiting for packets with an attributable direction.'}</p> : (
-        <div className="capture-table-wrap" tabIndex={0} role="region" aria-label="Observed flow table">
+      <LiveTablePages key={JSON.stringify([view?.sessionId, query, sort])} rows={matching} label="Connection pages"
+        empty={flows.length ? 'No flows match this filter.' : 'Waiting for packets with an attributable direction.'}>
+        {page => <div className="capture-table-wrap" tabIndex={0} role="region" aria-label="Observed flow table">
           <table className="capture-table">
             <thead><tr><th>Local endpoint</th><th>Remote endpoint</th><th>Protocol</th><th>Sampled TCP state</th><th>Observed process</th><th>Country</th><th>Packets</th><th>Sent</th><th>Received</th><th>First seen</th><th>Last seen</th></tr></thead>
-            <tbody>{matching.map(({ endpoint: pair, packets, sentBytes, receivedBytes, firstSeen, lastSeen, owner, conflictingOwners }) => (
+            <tbody>{page.map(({ endpoint: pair, packets, sentBytes, receivedBytes, firstSeen, lastSeen, owner, conflictingOwners }) => (
               <tr key={JSON.stringify(pair)}>
-                <td>{endpoint(pair.localIp, pair.localPort)}</td><td>{endpoint(pair.remoteIp, pair.remotePort)}</td>
+                <td>{endpoint(pair.localIp, pair.localPort)}</td><td><a href={`#packets?q=${encodeURIComponent(pair.remoteIp)}`}>{endpoint(pair.remoteIp, pair.remotePort)}</a></td>
                 <td>{pair.protocol}</td><td>{owner?.tcpState ?? 'Unavailable'}</td>
                 <td>{conflictingOwners ? 'Multiple observed owners' : owner ? `${owner.process.name} · ${owner.process.pid}` : 'Unattributed'}</td>
                 <td>{countries.get(pair.remoteIp) ?? 'Unknown'}</td><td>{packets.toLocaleString()}</td><td>{formatBytes(sentBytes)}</td>
@@ -195,8 +198,8 @@ export function FlowPanel({ view, geo }: { view?: CaptureView; geo?: GeoSnapshot
               </tr>
             ))}</tbody>
           </table>
-        </div>
-      )}
+        </div>}
+      </LiveTablePages>
     </section>
   );
 }

@@ -1,5 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -17,8 +20,11 @@ internal static class Program
     private static async Task OpenAsync(Application application, bool verify)
     {
         var exitCode = 0;
+        Window? splash = null;
         try
         {
+            splash = CreateSplash();
+            splash.Show();
             var profile = Environment.GetEnvironmentVariable("PNS_WEBVIEW_DATA_DIR") ??
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "PersonalNetworkSecurity", "WebView2");
@@ -28,14 +34,56 @@ internal static class Program
             var window = new Window
             {
                 Title = "Personal Network Security",
+                Icon = LoadArtwork("Logo.ico"),
                 Width = 1360,
                 Height = 900,
                 MinWidth = 380,
                 MinHeight = 480,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                Background = new SolidColorBrush(Color.FromRgb(0x0d, 0x17, 0x27)),
                 Content = view,
             };
+            if (!verify) DesktopWindowState.Restore(window);
+            var allowClose = verify;
+            var checkingClose = false;
+            window.Closing += async (_, eventArgs) =>
+            {
+                if (allowClose) return;
+                eventArgs.Cancel = true;
+                if (checkingClose) return;
+                checkingClose = true;
+                try
+                {
+                    var running = false;
+                    if (view.CoreWebView2 is not null)
+                    {
+                        using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                        client.DefaultRequestHeaders.Add("Cookie", $"{host.CookieName}={host.CookieValue}");
+                        using var response = await client.GetAsync(new Uri(host.Origin, "/api/capture/status"));
+                        response.EnsureSuccessStatusCode();
+                        using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                        running = document.RootElement.GetProperty("state").GetString() == "running";
+                    }
+                    if (running && MessageBox.Show(window,
+                        "Closing the app stops packet capture. Close the app?",
+                        "Stop capture and close", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+                    DesktopWindowState.Save(window);
+                    allowClose = true;
+                    window.Close();
+                }
+                catch
+                {
+                    if (MessageBox.Show(window, "Capture status is unavailable. Close the app and stop any active capture?",
+                        "Close dashboard", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        allowClose = true;
+                        window.Close();
+                    }
+                }
+                finally { checkingClose = false; }
+            };
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            window.SourceInitialized += (_, _) => DashboardChrome.Apply(window);
             window.Closed += (_, _) => closed.TrySetResult();
             application.MainWindow = window;
             window.Show();
@@ -68,6 +116,11 @@ internal static class Program
                 if (closed.Task.IsCompleted) throw new OperationCanceledException();
                 if (navigation == loaded.Task && !await loaded.Task)
                     throw new InvalidOperationException("The local dashboard could not load.");
+                await WaitForDashboardAsync(core, closed.Task);
+                splash.Close();
+                splash = null;
+                window.Activate();
+                view.Focus();
                 if (verify)
                 {
                     await VerifyAsync(core);
@@ -77,12 +130,15 @@ internal static class Program
             }
             finally
             {
+                allowClose = true;
                 if (!closed.Task.IsCompleted) window.Close();
             }
         }
         catch (OperationCanceledException) when (!verify) { }
         catch (Exception error)
         {
+            splash?.Close();
+            splash = null;
             exitCode = 1;
             if (verify)
                 Console.Error.WriteLine(error);
@@ -91,7 +147,72 @@ internal static class Program
                     ? "Install the Microsoft Edge WebView2 Evergreen Runtime and try again."
                     : error.Message, "Personal Network Security", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        finally { splash?.Close(); }
         application.Shutdown(exitCode);
+    }
+
+    private static BitmapImage LoadArtwork(string name) =>
+        new(new Uri($"pack://application:,,,/Assets/{name}", UriKind.Absolute));
+
+    private static Window CreateSplash()
+    {
+        var content = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        content.Children.Add(new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(129, 146, 170)),
+            CornerRadius = new CornerRadius(22),
+            Child = new Image { Source = LoadArtwork("Logo.png"), Width = 280, Height = 280 },
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = "Starting Personal Network Security…",
+            Foreground = Brushes.White,
+            FontSize = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(12, 16, 12, 0),
+        });
+        return new Window
+        {
+            Title = "Starting Personal Network Security",
+            Width = 390,
+            Height = 380,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Topmost = true,
+            Background = new SolidColorBrush(Color.FromRgb(13, 23, 39)),
+            Content = content,
+        };
+    }
+
+    private static async Task WaitForDashboardAsync(CoreWebView2 view, Task closed)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            while (!closed.IsCompleted)
+            {
+                var ready = await view.ExecuteScriptAsync("""
+                (() => {
+                    const logo = document.querySelector('img.brand-logo');
+                    return Boolean(logo?.complete && logo.naturalWidth && document.querySelector('main#workspace'));
+                })()
+                """).WaitAsync(timeout.Token);
+                if (ready == "true") return;
+                await Task.Delay(100, timeout.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!closed.IsCompleted)
+        {
+            throw new TimeoutException("The dashboard startup screen timed out.");
+        }
+        throw new OperationCanceledException();
     }
 
     private static bool IsDashboard(string address, Uri origin) =>

@@ -6,8 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PersonalNetworkSecurity</AssemblyName>
+    <ApplicationIcon>Assets/Logo.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/Logo.png" />
+    <Resource Include="Assets/Logo.ico" />
     <ProjectReference Include="../../backend/PersonalNetworkSecurity.Api/PersonalNetworkSecurity.Api.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
   </ItemGroup>

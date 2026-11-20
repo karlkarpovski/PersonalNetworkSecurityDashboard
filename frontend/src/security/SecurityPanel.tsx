@@ -176,6 +176,7 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
           <article className="inset-surface security-evidence" aria-label="Alert evidence">
             <h3>{ruleNames[inspected.rule] ?? inspected.rule}</h3>
             <p>{inspected.evidence}</p>
+            {inspected.remoteIp && <a href={`#connections?q=${encodeURIComponent(inspected.remoteIp)}`}>Investigate connections</a>}
             <p><time dateTime={inspected.observedAt}>{new Date(inspected.observedAt).toLocaleString()}</time>
               {inspected.remoteIp && ` · ${inspected.remoteIp}`}</p>
             <div className="capture-controls">
@@ -187,12 +188,19 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
           </article>
         </div> : <p>No alerts match these filters.</p>}
       </section>
-      <section className="soft-panel capture-panel" aria-labelledby="rules-title">
-        <h2 id="rules-title">Detection rules</h2>
+      <details className="soft-panel capture-panel"><summary>Configure detection rules</summary><section aria-labelledby="rules-title">
+        <h2 id="rules-title">Detection rules</h2><p>Set a numeric threshold to 0 to turn that detector off. Window and sensitivity values configure enabled detectors. Checkboxes enable individual rules.</p>
         <p>Existing traffic thresholds use fixed 10-second windows. Reconnaissance and traffic anomaly thresholds each use their own configurable window. Rate thresholds are averaged over the full traffic anomaly window. Use 0 to disable a threshold. Port and country matches have low severity.</p>
         {rules && <form className="security-form" onSubmit={event => { event.preventDefault(); saveRules(); }}>
-          {thresholds.map(({ key, label, max, ...range }) => <label key={key}>{label}<input type="number" required min={"min" in range ? range.min : 0} max={max}
-            value={rules[key]} onChange={event => setRules({ ...rules, [key]: event.target.value === '' ? '' : Number(event.target.value) })} /></label>)}
+          {['Traffic', 'Reconnaissance', 'Traffic anomalies', 'DNS'].map((group, index) =>
+            <fieldset className="security-form security-rule-group" key={group}><legend>{group}</legend>
+            {thresholds.slice(...([[0, 4], [4, 9], [9, 15], [15, 20]][index] as [number, number])).map(({ key, label, max, ...range }) => <label key={key}>{label}
+              {!('min' in range) && <span><input type="checkbox" aria-label={`Enable ${label}`}
+                checked={Number(rules[key]) > 0} onChange={event => setRules({ ...rules,
+                  [key]: event.target.checked ? ({ bandwidthMiB: 50, destinations: 50, synPackets: 12,
+                    refusedAttempts: 5 } as Record<string, number>)[key] ?? 10 : 0 })} /> Enabled</span>}
+              <input type="number" required min={"min" in range ? range.min : 0} max={max}
+            value={rules[key]} onChange={event => setRules({ ...rules, [key]: event.target.value === '' ? '' : Number(event.target.value) })} /></label>)}</fieldset>)}
           <label>Monitored destination ports<input value={ports} onChange={event => setPorts(event.target.value)} placeholder="Comma-separated, e.g. 23, 445" maxLength={256} /></label>
           <label>Monitored country codes<input value={countries} onChange={event => setCountries(event.target.value)} placeholder="Comma-separated, e.g. GB, JP" maxLength={160} /></label>
           <label>Allowed IP protocol numbers<input value={allowedProtocols} onChange={event => setAllowedProtocols(event.target.value)}
@@ -210,7 +218,7 @@ export function SecurityPanel({ code, summary }: { code: string; summary?: Alert
           <ApplicationFields draft={application} onChange={setApplication} />
           <button className="capture-button" type="submit" disabled={pending}>Save rules</button>
         </form>}
-      </section>
+      </section></details>
       <section className="soft-panel capture-panel" aria-labelledby="address-rules-title">
         <h2 id="address-rules-title">Watchlist and address rules</h2>
         <p>Watched addresses generate informational alerts. Blocklisted addresses generate high alerts. Trusted addresses are excluded from rule evaluation. Each IP belongs to one list.</p>

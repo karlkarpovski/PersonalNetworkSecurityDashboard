@@ -174,6 +174,12 @@ public static class DashboardHost
             await monitor.StopCaptureAsync();
             return Results.NoContent();
         });
+        capture.MapGet("/diagnostics", (LocalStore store) => new {
+            version = typeof(DashboardHost).Assembly.GetName().Version?.ToString() ?? "unknown",
+            databasePath = store.Path,
+            captureDriver = System.IO.File.Exists(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "Npcap", "wpcap.dll")),
+            runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
+        });
         var geo = capture.MapGroup("/geo");
         geo.MapGet("/settings", (CaptureGeography geography) => geography.Settings());
         geo.MapPost("/reload", (CaptureGeography geography) => geography.Reload());

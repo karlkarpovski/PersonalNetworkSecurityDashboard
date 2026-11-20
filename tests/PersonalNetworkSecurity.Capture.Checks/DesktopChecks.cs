@@ -36,12 +36,28 @@ internal static class DesktopChecks
 
                 if (Environment.GetEnvironmentVariable("PNS_TEST_DESKTOP_CAPTURE") == "1")
                     testPort = await CaptureLoopback(client);
+                if (Environment.GetEnvironmentVariable("PNS_TEST_PHYSICAL_CAPTURE") == "1")
+                {
+                    using var stopped = await client.PostAsync("api/capture/stop", null);
+                    stopped.EnsureSuccessStatusCode();
+                    var adapters = await client.GetFromJsonAsync<AdapterResult>("api/capture/adapters");
+                    var physical = adapters?.Adapters.FirstOrDefault(adapter => adapter.LinkStatus == "Up" &&
+                        !adapter.Id.EndsWith("NPF_Loopback", StringComparison.OrdinalIgnoreCase));
+                    Require(physical is not null, "connected physical adapter available");
+                    using var started = await client.PostAsJsonAsync("api/capture/start", new CaptureStart(physical!.Id));
+                    started.EnsureSuccessStatusCode();
+                    await Task.Delay(TimeSpan.FromSeconds(15));
+                    using var status = await client.GetFromJsonAsync<JsonDocument>("api/capture/status");
+                    Require(status!.RootElement.GetProperty("state").GetString() == "running", "physical adapter remains running");
+                    using var ended = await client.PostAsync("api/capture/stop", null);
+                    ended.EnsureSuccessStatusCode();
+                    Console.WriteLine("Physical adapter passive capture remained running for 15 seconds and stopped successfully.");
+                }
             }
             if (testPort is { } port)
             {
                 using var store = new LocalStore(path);
-                var session = store.Sessions().Single();
-                Require(store.History(session.Id, port.ToString(), null, 100).Packets.Any(packet => packet.SourcePort == port),
+                Require(store.Sessions().Any(session => store.History(session.Id, port.ToString(), null, 100).Packets.Any(packet => packet.SourcePort == port)),
                     "host shutdown saved the real loopback packet");
             }
             Console.WriteLine(testPort.HasValue

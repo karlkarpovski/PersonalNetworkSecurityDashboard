@@ -34,7 +34,7 @@ Open [the local dashboard](http://127.0.0.1:5173/). Vite proxies the health requ
 
 ## Try the globe
 
-Open **Global Traffic Map**, then turn on **Demo traffic**. The globe uses a local country-border texture and works without Npcap or a running API. Drag to rotate, scroll to zoom, and double-click the globe to focus an area. Click an arc or marker, or use the keyboard-accessible endpoint list, to inspect a route. Cyan travels outbound, orange travels inbound, and a red marker identifies the flagged example. The performance setting reduces curve segments and particle count.
+Open **Global Traffic Map** to inspect captured endpoints. Configure an approximate origin and a local GeoIP database to display routes. Drag or use the arrow keys to rotate, scroll to zoom, and select an endpoint to inspect it. Cyan indicates outbound traffic, orange indicates inbound traffic, and a red marker indicates an open high alert. Performance mode reduces curve segments and particle count.
 
 Demo addresses and volumes are fictional and stay within the map view. If WebGL 2 is unavailable, the demo endpoint list remains usable. Live map and GeoIP integration are scheduled for Phases 5 and 6.
 
@@ -82,7 +82,7 @@ For parallel local development instances, set matching `PNS_API_PORT` and `PNS_U
 
 **Global Traffic Map** draws live arcs when both endpoints have coordinates. The endpoint list still shows private, special-use, and unmatched addresses, with reasons where available. **IP Intelligence** looks up any valid IPv4 or IPv6 address locally. GeoIP can identify a VPN, proxy, or hosting network's exit area. The map shows estimated areas and communication between endpoints. Physical packet routes remain unknown.
 
-Demo mode stays separate. The application makes no external geolocation or public-IP discovery requests.
+The application makes no external geolocation or public-IP discovery requests.
 
 ## Local storage and retention
 
@@ -119,3 +119,13 @@ Set `PNS_TEST_WINDOWS_SOCKETS=1` to also verify ownership against real IPv4 and 
 Set `PNS_TEST_DESKTOP_HOST=1` to check the desktop host's static assets, cookie authentication, and origin policy. Set `PNS_TEST_DESKTOP_CAPTURE=1` alongside it to send a controlled Npcap loopback packet and verify that host shutdown saves it. The fixture runner measures the time to aggregate 100,000 metadata updates and checks the storage bounds.
 
 See the [architecture and implementation roadmap](docs/roadmap.md) for dependency versions, prerequisites, planned modules and acceptance checks.
+
+## Release verification
+
+The dashboard includes ten-row live table pages, display pausing, filtered investigation links, capture status and local diagnostics. Desktop window bounds persist locally and an active capture prompts before closing.
+
+DNS correlation retains the most recent 4,096 transactions per configured window. When capacity is reached, an informational DNS anomaly explains the reduced coverage. Query-rate counting stops for that window to avoid recounting evicted retries. Correlation continues for retained recent transactions.
+
+Set `PNS_TEST_PHYSICAL_CAPTURE=1` alongside `PNS_TEST_DESKTOP_HOST=1` and `PNS_TEST_DESKTOP_CAPTURE=1` to run a fifteen-second passive capture on an active adapter. These checks use temporary storage. The synthetic DNS load fixture evaluates 100,000 metadata observations and reports elapsed time.
+
+A separate clean Windows installation and an extended traffic soak remain release acceptance checks. The local startup verifier exercises the packaged WebView2 dashboard and keyboard skip navigation.
